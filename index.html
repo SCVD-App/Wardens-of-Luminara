@@ -362,14 +362,58 @@ function consumeFreePlay(){
   save.plays.count++;
   writeSave(save);
 }
-// TEMPORARY client-side stand-in for real purchase verification.
-// The live Ancient Games apps (Hnefatafl, Jumpin' Pin, Two Ancient Classics) validate
-// tokens against a Cloudflare Worker after a Stripe checkout. This game has no Worker
-// deployed yet, so this just accepts a plausible-looking token so the unlock flow can
-// be tested end-to-end. Swap the body of this function for a fetch() to the real
-// Worker once one exists for Wardens of Luminara.
-function validateProToken(token){
-  return typeof token === 'string' && token.trim().length >= 10;
+// Fill this in once the Worker is deployed, e.g. 'https://wardens-worker.yoursubdomain.workers.dev'
+const WORKER_URL = '';
+
+async function validateProToken(token){
+  if(!token || typeof token !== 'string') return false;
+  if(!WORKER_URL){
+    // No Worker deployed yet — accept a plausible-looking token so the unlock
+    // flow can be tested end-to-end. Remove this fallback once WORKER_URL is set.
+    return token.trim().length >= 10;
+  }
+  try{
+    const resp = await fetch(`${WORKER_URL}/validate-token`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: token.trim() })
+    });
+    const data = await resp.json();
+    return !!data.valid;
+  }catch(e){
+    return false;
+  }
+}
+async function beginProCheckout(){
+  if(!WORKER_URL){
+    showBanner("Checkout isn't wired up yet — this app has no payment Worker deployed.");
+    return;
+  }
+  try{
+    const resp = await fetch(`${WORKER_URL}/create-checkout-session`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+    const data = await resp.json();
+    if(data.url) window.location.href = data.url;
+    else showBanner('Could not start checkout — try again shortly.');
+  }catch(e){
+    showBanner('Could not reach the checkout server.');
+  }
+}
+async function checkForCheckoutReturn(){
+  if(!WORKER_URL) return;
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('checkout') !== 'success') return;
+  const sessionId = params.get('session_id');
+  history.replaceState({}, '', window.location.pathname);
+  if(!sessionId) return;
+  try{
+    const resp = await fetch(`${WORKER_URL}/checkout-success?session_id=${encodeURIComponent(sessionId)}`);
+    const data = await resp.json();
+    if(data.token){
+      save.pro = true;
+      save.proToken = data.token;
+      writeSave(save);
+      showBanner('Pro unlocked — thank you!');
+    }
+  }catch(e){ /* ignore — they can restore via token/email later */ }
 }
 // Dev-only helpers, console access only (same pattern as the Ancient Games quota reset)
 window.__wardensDevResetQuota = () => { save.plays = {date:'', count:0}; writeSave(save); showModal(); };
@@ -1643,12 +1687,10 @@ function showPaywall(){
       <div><button id="restoreBtn" style="margin-top:10px;">Restore Purchase</button></div>
     </div>
     <div><button id="paywallBackBtn" style="margin-top:16px;background:none;border:1px solid #3a4570;color:#9aa3c0;padding:7px 18px;border-radius:16px;cursor:pointer;font-family:Georgia,serif;font-size:0.82em;font-style:italic;">Back to menu</button></div>`;
-  document.getElementById('buyProBtn').onclick = ()=>{
-    showBanner('Checkout isn\'t wired up yet — this app has no payment Worker deployed.');
-  };
-  document.getElementById('restoreBtn').onclick = ()=>{
+  document.getElementById('buyProBtn').onclick = beginProCheckout;
+  document.getElementById('restoreBtn').onclick = async ()=>{
     const token = document.getElementById('tokenInput').value;
-    if(validateProToken(token)){
+    if(await validateProToken(token)){
       save.pro = true;
       save.proToken = token.trim();
       writeSave(save);
@@ -1760,6 +1802,7 @@ document.getElementById('speedBtn').onclick = ()=>{
 state.screen='menu';
 showModal();
 requestAnimationFrame(tick);
+checkForCheckoutReturn().then(()=>{ if(state.screen==='menu') showModal(); });
 
 })();
 </script>
