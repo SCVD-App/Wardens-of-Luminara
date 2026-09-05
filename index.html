@@ -98,8 +98,8 @@
 
   #toolbar{
     display:flex;
-    gap:8px;
-    padding:10px 6px;
+    gap:6px;
+    padding:8px 6px;
     flex-wrap:wrap;
     justify-content:center;
     max-width:940px;
@@ -108,11 +108,11 @@
     background:linear-gradient(180deg,#1a2038,#12162a);
     border:1px solid #313a5c;
     border-radius:6px;
-    padding:8px 10px;
+    padding:6px 9px;
     color:var(--parchment);
     cursor:pointer;
     text-align:left;
-    min-width:118px;
+    min-width:102px;
     transition:border-color .15s, transform .1s;
     font-family:Georgia,serif;
     position:relative;
@@ -127,6 +127,8 @@
     box-shadow:0 0 6px currentColor;
   }
   .tower-btn .tdesc{font-size:0.68em;color:#8a93b8;font-style:italic;margin-top:2px;line-height:1.25;}
+  .tower-btn .tdesc.collapsible{display:none;}
+  .tower-btn.selected .tdesc.collapsible{display:block;margin-top:5px;}
 
   #sidepanel{
     position:absolute;
@@ -1686,7 +1688,7 @@ function buildToolbar(){
     btn.className='tower-btn'+(state.selectedBuild===key?' selected':'');
     if(state.echoes<def.cost) btn.classList.add('disabled');
     btn.innerHTML = `<div><span class="tswatch" style="background:${def.color};color:${def.color}"></span><span class="tname">${def.name}</span></div>
-      <div class="tcost">${def.cost} echoes</div><div class="tdesc">${def.desc}</div>`;
+      <div class="tcost">${def.cost} echoes</div><div class="tdesc collapsible">${def.desc}</div>`;
     btn.onclick = ()=>{
       state.selectedBuild = state.selectedBuild===key? null : key;
       state.selectedTower=null; hideSidePanel();
