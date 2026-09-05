@@ -210,6 +210,9 @@
   }
   .modal .flavor{color:#9aa3c0;font-style:italic;font-size:0.95em;margin-bottom:22px;line-height:1.5;}
   .maps{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;}
+  .quest-block{ margin-bottom:22px; }
+  .quest-head{ color:var(--hall-gold); font-size:1.05em; margin-bottom:2px; letter-spacing:0.02em; }
+  .quest-desc{ color:#9aa3c0; font-style:italic; font-size:0.8em; margin-bottom:12px; }
   .map-card{
     width:150px;
     border:1px solid #313a5c;
@@ -334,7 +337,7 @@ function loadSave(){
   try{ s = JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; }
   catch(e){ s = {}; }
   if(s.unlocked===undefined) s.unlocked = 1;
-  if(!s.best) s.best = {1:0,2:0,3:0};
+  if(!s.best) s.best = {1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0};
   if(s.claudeDefeats===undefined) s.claudeDefeats = 0;
   if(!s.plays) s.plays = { date:'', count:0 };
   if(s.pro===undefined) s.pro = false;
@@ -436,9 +439,14 @@ const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
 /* ---------- maps ---------- */
+const QUESTS = [
+  { id:1, name:"Quest I — The Montreux Approach", desc:"Getting to the Casino was never the hard part." },
+  { id:2, name:"Quest II — The Constellation Depths", desc:"Beyond Montreux, the Geneva Constellation grows stranger." },
+  { id:3, name:"Quest III — The Reckoning", desc:"Where it ends — one way or another." }
+];
 const MAPS = [
   {
-    id:1,
+    id:1, quest:1,
     name:"The Outer Ring",
     desc:"Quiet approach lanes above Geneva Constellation.",
     bg:['#141a30','#0a0d1a'],
@@ -449,7 +457,7 @@ const MAPS = [
     bossFlavor:"He's here already, somehow — nobody can explain it. The Outer Ring smells faintly of smoke."
   },
   {
-    id:2,
+    id:2, quest:1,
     name:"Approach to Montreux",
     desc:"The lake glows strange here. Dusk never quite finishes.",
     bg:['#241a30','#120a1a'],
@@ -460,7 +468,7 @@ const MAPS = [
     bossFlavor:"Montreux again. Of course. He never really left the lake."
   },
   {
-    id:3,
+    id:3, quest:1,
     name:"The Grand Hall (Casino Night)",
     desc:"Somewhere below, a stage, a fire, and the Mothers of Invention mid-set.",
     bg:['#301a12','#1a0d08'],
@@ -469,6 +477,72 @@ const MAPS = [
     lives:16,
     waveCount:10,
     bossFlavor:"Back where it started. The Casino, the fire, the man himself — turned all the way up."
+  },
+  {
+    id:4, quest:2,
+    name:"The Hollow Orbit",
+    desc:"Derelict relay stations drift in silence here, still humming with old resonance.",
+    bg:['#16223a','#0a1220'],
+    pathColor:'rgba(110,200,255,0.18)',
+    waypoints:[[-20,60],[200,60],[200,220],[420,220],[420,60],[640,60],[640,300],[860,300],[860,120],[920,120]],
+    lives:16,
+    waveCount:9,
+    bossFlavor:"Something rides the dead relays now, wearing static like a second skin."
+  },
+  {
+    id:5, quest:2,
+    name:"The Dissonance Rift",
+    desc:"A tear in the Constellation's harmony — the deeper you go, the less it sounds like music.",
+    bg:['#241530','#100816'],
+    pathColor:'rgba(200,90,220,0.18)',
+    waypoints:[[-20,400],[140,400],[140,160],[320,160],[320,480],[500,480],[500,80],[680,80],[680,400],[860,400],[860,220],[920,220]],
+    lives:15,
+    waveCount:10,
+    bossFlavor:"He doesn't so much arrive here as bleed through the tear."
+  },
+  {
+    id:6, quest:2,
+    name:"The Valdric Archive",
+    desc:"Master Valdric Noir's old records, half-burned, half-remembered.",
+    bg:['#2a2418','#14100a'],
+    pathColor:'rgba(244,226,133,0.2)',
+    waypoints:[[-20,120],[260,120],[260,340],[60,340],[60,520],[440,520],[440,260],[680,260],[680,60],[920,60]],
+    lives:14,
+    waveCount:11,
+    bossFlavor:"The Archive keeps every performance it ever recorded. Apparently that includes him."
+  },
+  {
+    id:7, quest:3,
+    name:"The Shattered Chorus",
+    desc:"What's left of a choir hall after its own resonance turned against it.",
+    bg:['#221535','#0e0818'],
+    pathColor:'rgba(150,90,255,0.18)',
+    waypoints:[[-20,500],[180,500],[180,240],[380,240],[380,500],[560,500],[560,100],[760,100],[760,380],[920,380]],
+    lives:14,
+    waveCount:11,
+    bossFlavor:"The Chorus never really stopped singing. It just started screaming instead."
+  },
+  {
+    id:8, quest:3,
+    name:"The Ember Choir",
+    desc:"Where the Casino fire's last embers never quite went out.",
+    bg:['#301a10','#180a06'],
+    pathColor:'rgba(255,120,60,0.2)',
+    waypoints:[[-20,80],[120,80],[120,300],[300,300],[300,80],[480,80],[480,460],[660,460],[660,180],[860,180],[860,420],[920,420]],
+    lives:13,
+    waveCount:12,
+    bossFlavor:"He's more comfortable in embers than anywhere else in the Constellation."
+  },
+  {
+    id:9, quest:3,
+    name:"The Final Cadence",
+    desc:"The Grand Resonance Hall's innermost chamber. If the Hall falls, it falls here.",
+    bg:['#332a1c','#15120c'],
+    pathColor:'rgba(255,215,120,0.22)',
+    waypoints:[[-20,300],[140,300],[140,80],[320,80],[320,500],[500,500],[500,140],[680,140],[680,440],[860,440],[860,240],[920,240]],
+    lives:12,
+    waveCount:13,
+    bossFlavor:"Every version of him that ever got away is standing behind this one."
   }
 ];
 let currentMap = null;
@@ -575,7 +649,7 @@ function generateWave(map, waveIndex){
   // waveIndex 1-based; last wave of map is a boss wave
   const isBoss = waveIndex === map.waveCount;
   const list = [];
-  const scale = 1 + (waveIndex-1)*0.18 + (map.id-1)*0.35;
+  const scale = 1 + (waveIndex-1)*0.18 + (map.id-1)*0.22;
   if(isBoss){
     const defeats = save.claudeDefeats;
     const bossScale = scale * (1 + defeats*0.4);
@@ -593,7 +667,7 @@ function generateWave(map, waveIndex){
     for(let i=0;i<Math.min(8, 3+map.id+Math.min(defeats,4)); i++) list.push({type:'whisper', delay:i*500});
     return list;
   }
-  const n = 5 + waveIndex + Math.floor((map.id-1)*1.5);
+  const n = 5 + waveIndex + Math.floor((map.id-1)*0.8);
   const pool = ['whisper'];
   if(waveIndex >= 2) pool.push('screecher');
   if(waveIndex >= 3) pool.push('chorusWisp');
@@ -996,7 +1070,11 @@ function showBanner(text){
 
 /* ---------- terrain watermark: starfield, nebula glow, circuit traces ---------- */
 function generateWatermark(map){
-  const nebColors = {1:'79,216,232', 2:'216,79,160', 3:'255,106,61'}[map.id] || '79,216,232';
+  const nebColors = {
+    1:'79,216,232', 2:'216,79,160', 3:'255,106,61',
+    4:'110,200,255', 5:'200,90,220', 6:'244,226,133',
+    7:'150,90,255', 8:'255,120,60', 9:'255,215,120'
+  }[map.id] || '79,216,232';
   const stars = [];
   for(let i=0;i<55;i++){
     stars.push({
@@ -1774,16 +1852,23 @@ function showModal(){
     box.innerHTML = `<h2>Wardens of Luminara</h2>
       <div class="flavor">The Grand Resonance Hall keeps the Geneva Constellation in tune.<br>Something out of key wants it silent. Choose your approach.</div>
       ${quotaLine}
-      <div class="maps">${MAPS.map(m=>{
-        const locked = !save.pro && m.id>save.unlocked;
-        const best = save.best[m.id]||0;
-        return `<div class="map-card ${locked?'locked':''}" data-map="${m.id}">
-          <h4>${m.name}</h4>
-          <div class="mdesc">${m.desc}</div>
-          ${best? `<div class="best">Best: wave ${best}/${m.waveCount}</div>`:''}
-          ${locked? `<div class="best" style="color:#8a93b8;">Locked</div>`:''}
+      ${QUESTS.map(q=>{
+        const questMaps = MAPS.filter(m=>m.quest===q.id);
+        return `<div class="quest-block">
+          <div class="quest-head">${q.name}</div>
+          <div class="quest-desc">${q.desc}</div>
+          <div class="maps">${questMaps.map(m=>{
+            const locked = !save.pro && m.id>save.unlocked;
+            const best = save.best[m.id]||0;
+            return `<div class="map-card ${locked?'locked':''}" data-map="${m.id}">
+              <h4>${m.name}</h4>
+              <div class="mdesc">${m.desc}</div>
+              ${best? `<div class="best">Best: wave ${best}/${m.waveCount}</div>`:''}
+              ${locked? `<div class="best" style="color:#8a93b8;">Locked</div>`:''}
+            </div>`;
+          }).join('')}</div>
         </div>`;
-      }).join('')}</div>
+      }).join('')}
       <div><button id="menuArmoryBtn">View Field Manual</button>${save.pro
         ? ` <button id="menuSkinBtn">Skin: ${save.skin==='aurora'?'Aurora':'Classic'}</button>`
         : ' <button id="menuProBtn">Unlock Pro</button>'}</div>`;
