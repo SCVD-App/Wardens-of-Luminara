@@ -339,6 +339,7 @@ function loadSave(){
   if(!s.plays) s.plays = { date:'', count:0 };
   if(s.pro===undefined) s.pro = false;
   if(s.proToken===undefined) s.proToken = null;
+  if(!s.skin) s.skin = 'classic';
   return s;
 }
 function writeSave(s){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(s)); }catch(e){} }
@@ -487,9 +488,12 @@ const TOWERS = {
   mothers:{ key:'mothers', name:'The Mothers', cost:140, range:110, rate:0, support:true, color:'#b084f0',
     desc:"Freeform chaos: random buff or curse, every few seconds.", unlockWave:10 },
   rds:{ key:'rds', name:'RDS Amp Stack', cost:210, range:135, rate:1700, dmgMin:8, dmgMax:95, splash:65, color:'#ff5c5c',
-    desc:"Rolling Drunk Stones. Off-beat, deafening, occasionally glorious.", unlockWave:14, secret:true }
+    desc:"Rolling Drunk Stones. Off-beat, deafening, occasionally glorious.", unlockWave:14, secret:true },
+  echo:{ key:'echo', name:"Valdric's Echo", cost:150, range:120, rate:900, dmg:20, color:'#8a6bff',
+    desc:"A resonant pulse that bounces between enemies.", air:true, ground:true,
+    chain:3, chainFalloff:0.65, chainRange:140, proOnly:true }
 };
-const TOWER_ORDER = ['spire','bloom','piercer','lyre','baton','mothers','rds'];
+const TOWER_ORDER = ['spire','bloom','piercer','lyre','baton','mothers','rds','echo'];
 
 /* ---------- enemies ---------- */
 const ENEMY_DEFS = {
@@ -820,6 +824,9 @@ function tick(now){
         const rdsPowerMul = (t.resonanceBoost && t.resonanceBoost.until > now) ? 2 : 1;
         const dmg = (TOWERS.rds.dmgMin + Math.random()*(TOWERS.rds.dmgMax-TOWERS.rds.dmgMin)) * rdsPowerMul;
         applyAoE(t, target, dmg + (t.tier-1)*dmg*0.4, stats.splash, false);
+      } else if(t.key==='echo'){
+        const chainCount = TOWERS.echo.chain + (t.tier-1);
+        applyChain(target, stats.dmg, chainCount, TOWERS.echo.chainFalloff, TOWERS.echo.chainRange);
       } else if(TOWERS[t.key].splash){
         applyAoE(t, target, stats.dmg, stats.splash, false);
       } else {
@@ -896,6 +903,27 @@ function applyAoE(t, center, dmg, radius, ignoreArmor){
     if(Math.hypot(e.x-center.x,e.y-center.y) <= radius){
       dealDamage(e, dmg, ignoreArmor);
     }
+  }
+}
+function applyChain(origin, dmg, chainCount, falloff, chainRange){
+  let currentDmg = dmg;
+  let last = origin;
+  const hit = new Set([origin]);
+  dealDamage(origin, currentDmg, false);
+  spawnParticle(origin.x, origin.y, TOWERS.echo.color, 6);
+  for(let i=0;i<chainCount-1;i++){
+    let next=null, bestDist=Infinity;
+    for(const e of state.enemies){
+      if(e.hp<=0 || hit.has(e)) continue;
+      const d = Math.hypot(e.x-last.x, e.y-last.y);
+      if(d<=chainRange && d<bestDist){ next=e; bestDist=d; }
+    }
+    if(!next) break;
+    currentDmg *= falloff;
+    dealDamage(next, currentDmg, false);
+    spawnParticle(next.x, next.y, TOWERS.echo.color, 6);
+    hit.add(next);
+    last = next;
   }
 }
 
@@ -1002,6 +1030,18 @@ function hexToRgb(hex){
   const n = parseInt(h,16);
   return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
 }
+function auroraColor(seed, now){
+  const hue = ((now/22) + seed*47) % 360;
+  return hslToHex(hue, 85, 62);
+}
+function hslToHex(h, s, l){
+  s/=100; l/=100;
+  const k = n => (n + h/30) % 12;
+  const a = s * Math.min(l, 1-l);
+  const f = n => l - a*Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n),1)));
+  const toHex = x => Math.round(255*x).toString(16).padStart(2,'0');
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+}
 function drawAuraGlow(ctx2, cx, cy, hexColor, radius, alpha){
   if(radius<=0) return;
   const {r,g,b} = hexToRgb(hexColor);
@@ -1019,6 +1059,8 @@ function drawAuraGlow(ctx2, cx, cy, hexColor, radius, alpha){
 const swordCanvas = document.getElementById('resonanceSword');
 const swordCtx = swordCanvas.getContext('2d');
 let swordWisps = [];
+const EMBER_TONES_AURORA = ['#8a6bff','#4fd8e8','#c084f0'];
+
 function drawResonanceSword(now){
   const w = swordCanvas.width, h = swordCanvas.height;
   swordCtx.clearRect(0,0,w,h);
@@ -1026,6 +1068,7 @@ function drawResonanceSword(now){
   const midY = h/2;
   const hiltW = 60, hiltH = 24;
   const leftX = 16;
+  const auroraOn = save.pro && save.skin==='aurora';
 
   // pommel
   swordCtx.beginPath();
@@ -1052,11 +1095,17 @@ function drawResonanceSword(now){
     const tipX = guardX + bladeLen;
     const bladeH = fullyCharged ? 11*pulse : 8;
     const grad = swordCtx.createLinearGradient(tipX, 0, guardX, 0);
-    grad.addColorStop(0, fullyCharged ? '#fff2b0' : '#ffcf5c');
-    grad.addColorStop(0.55, '#ff7a3d');
-    grad.addColorStop(1, '#7a1a0a');
+    if(auroraOn){
+      grad.addColorStop(0, fullyCharged ? '#f0e6ff' : '#c084f0');
+      grad.addColorStop(0.55, '#4fd8e8');
+      grad.addColorStop(1, '#2a1a6e');
+    } else {
+      grad.addColorStop(0, fullyCharged ? '#fff2b0' : '#ffcf5c');
+      grad.addColorStop(0.55, '#ff7a3d');
+      grad.addColorStop(1, '#7a1a0a');
+    }
     swordCtx.save();
-    swordCtx.shadowColor = fullyCharged ? '#ffdf9e' : '#ff7a3d';
+    swordCtx.shadowColor = auroraOn ? (fullyCharged ? '#dfc8ff' : '#8a6bff') : (fullyCharged ? '#ffdf9e' : '#ff7a3d');
     swordCtx.shadowBlur = fullyCharged ? 22*pulse : 10;
     swordCtx.fillStyle = grad;
     swordCtx.beginPath();
@@ -1068,7 +1117,7 @@ function drawResonanceSword(now){
     swordCtx.fill();
     swordCtx.restore();
 
-    // laser core running through the flame — fire sword with a plasma spine
+    // laser core running through the blade — fire (or aurora) sword with a plasma spine
     swordCtx.save();
     swordCtx.shadowColor = '#fff8dc';
     swordCtx.shadowBlur = fullyCharged ? 14*pulse : 6;
@@ -1083,12 +1132,13 @@ function drawResonanceSword(now){
 
     // smouldering plasma wisps rising off the blade
     if(Math.random() < 0.6){
+      const tones = auroraOn ? EMBER_TONES_AURORA : EMBER_TONES;
       swordWisps.push({
         x: guardX + Math.random()*bladeLen,
         y: midY + (Math.random()-0.5)*bladeH*0.8,
         vy: -(0.25+Math.random()*0.35),
         life: 1,
-        color: EMBER_TONES[Math.floor(Math.random()*EMBER_TONES.length)]
+        color: tones[Math.floor(Math.random()*tones.length)]
       });
     }
   }
@@ -1220,10 +1270,13 @@ function render(){
     const flashing = t.flashUntil && t.flashUntil>performance.now();
     const barrels = t.combined||1;
     const size = 11 + t.tier*2.5;
+    const auroraOn = save.pro && save.skin==='aurora';
+    const towerSeed = ((t.x*7 + t.y*13) % 100) / 100;
+    const displayColor = auroraOn ? auroraColor(towerSeed, performance.now()) : TOWERS[t.key].color;
     if(t.tier>=2){
       const auraRadius = t.tier===2 ? 26 : 38;
       const auraAlpha = t.tier===2 ? 0.22 : 0.36;
-      drawAuraGlow(ctx, t.x, t.y, TOWERS[t.key].color, auraRadius, auraAlpha);
+      drawAuraGlow(ctx, t.x, t.y, displayColor, auraRadius, auraAlpha);
     }
     if(t.resonanceBoost && t.resonanceBoost.until > performance.now()){
       const pulse = 0.6+0.4*Math.sin(performance.now()/150);
@@ -1231,7 +1284,7 @@ function render(){
     }
     const boosted = t.resonanceBoost && t.resonanceBoost.until > performance.now();
     ctx.save();
-    ctx.shadowColor = boosted ? '#ff9a4d' : TOWERS[t.key].color;
+    ctx.shadowColor = boosted ? '#ff9a4d' : displayColor;
     const baseBlur = 8 + (t.tier-1)*7;
     ctx.shadowBlur = flashing ? baseBlur+10 : baseBlur;
     if(boosted){
@@ -1241,7 +1294,7 @@ function render(){
       flameGrad.addColorStop(1, '#7a1a0a');
       ctx.fillStyle = flameGrad;
     } else {
-      ctx.fillStyle = TOWERS[t.key].color;
+      ctx.fillStyle = displayColor;
     }
     const barrelCenters = [];
     for(let b=0;b<barrels;b++){
@@ -1288,7 +1341,7 @@ function render(){
         ctx.beginPath();
         ctx.moveTo(t.x+px*off, t.y+py*off);
         ctx.lineTo(target.x+px*off, target.y+py*off);
-        ctx.strokeStyle = TOWERS[t.key].color;
+        ctx.strokeStyle = displayColor;
         ctx.globalAlpha=0.6;
         ctx.lineWidth=2;
         ctx.stroke();
@@ -1523,6 +1576,13 @@ function buildToolbar(){
   bar.innerHTML='';
   for(const key of TOWER_ORDER){
     const def = TOWERS[key];
+    if(def.proOnly && !save.pro){
+      const btn = document.createElement('div');
+      btn.className='tower-btn disabled';
+      btn.innerHTML = `<span class="tname">🔒 ${def.name}</span><div class="tdesc">Pro exclusive</div>`;
+      bar.appendChild(btn);
+      continue;
+    }
     if(def.unlockWave && state.waveNum < def.unlockWave){
       const btn = document.createElement('div');
       btn.className='tower-btn disabled';
@@ -1617,7 +1677,7 @@ function showArmory(onContinue){
   overlay.classList.remove('hidden');
   const rows = TOWER_ORDER.map(key=>{
     const def = TOWERS[key];
-    const lockNote = def.unlockWave ? ` — unlocks wave ${def.unlockWave}` : '';
+    const lockNote = def.proOnly ? ' — Pro exclusive' : (def.unlockWave ? ` — unlocks wave ${def.unlockWave}` : '');
     if(def.support){
       return `<div class="armory-row">
         <div class="armory-icons">
@@ -1715,7 +1775,7 @@ function showModal(){
       <div class="flavor">The Grand Resonance Hall keeps the Geneva Constellation in tune.<br>Something out of key wants it silent. Choose your approach.</div>
       ${quotaLine}
       <div class="maps">${MAPS.map(m=>{
-        const locked = m.id>save.unlocked;
+        const locked = !save.pro && m.id>save.unlocked;
         const best = save.best[m.id]||0;
         return `<div class="map-card ${locked?'locked':''}" data-map="${m.id}">
           <h4>${m.name}</h4>
@@ -1724,13 +1784,21 @@ function showModal(){
           ${locked? `<div class="best" style="color:#8a93b8;">Locked</div>`:''}
         </div>`;
       }).join('')}</div>
-      <div><button id="menuArmoryBtn">View Field Manual</button>${save.pro?'':' <button id="menuProBtn">Unlock Pro</button>'}</div>`;
+      <div><button id="menuArmoryBtn">View Field Manual</button>${save.pro
+        ? ` <button id="menuSkinBtn">Skin: ${save.skin==='aurora'?'Aurora':'Classic'}</button>`
+        : ' <button id="menuProBtn">Unlock Pro</button>'}</div>`;
     box.querySelectorAll('.map-card:not(.locked)').forEach(el=>{
       el.onclick = ()=> startMap(parseInt(el.dataset.map));
     });
     document.getElementById('menuArmoryBtn').onclick = ()=> showArmory(()=> showModal());
     const proBtn = document.getElementById('menuProBtn');
     if(proBtn) proBtn.onclick = ()=> showPaywall();
+    const skinBtn = document.getElementById('menuSkinBtn');
+    if(skinBtn) skinBtn.onclick = ()=>{
+      save.skin = save.skin==='aurora' ? 'classic' : 'aurora';
+      writeSave(save);
+      showModal();
+    };
   } else if(state.screen==='mapComplete'){
     const won3 = currentMap.id===MAPS.length;
     const defeats = save.claudeDefeats;
