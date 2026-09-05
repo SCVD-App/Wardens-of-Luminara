@@ -372,11 +372,11 @@ function consumeFreePlay(){
 const WORKER_URL = 'https://wardens-of-luminara.emblen-scott.workers.dev';
 
 async function validateProToken(token){
-  if(!token || typeof token !== 'string') return false;
+  if(!token || typeof token !== 'string') return {valid:false};
   if(!WORKER_URL){
     // No Worker deployed yet — accept a plausible-looking token so the unlock
     // flow can be tested end-to-end. Remove this fallback once WORKER_URL is set.
-    return token.trim().length >= 10;
+    return {valid: token.trim().length >= 10};
   }
   try{
     const resp = await fetch(`${WORKER_URL}/validate-token`, {
@@ -384,9 +384,9 @@ async function validateProToken(token){
       body: JSON.stringify({ token: token.trim() })
     });
     const data = await resp.json();
-    return !!data.valid;
+    return {valid: !!data.valid, reason: data.reason};
   }catch(e){
-    return false;
+    return {valid:false};
   }
 }
 async function beginProCheckout(){
@@ -547,6 +547,17 @@ const MAPS = [
     bossFlavor:"Every version of him that ever got away is standing behind this one."
   }
 ];
+const ENDLESS_MAP = {
+  id:'endless', quest:null,
+  name:"The Warden's Gauntlet",
+  desc:"No finish line. Just the Hall, the waves, and however long you can hold.",
+  bg:['#1a1424','#0a0812'],
+  pathColor:'rgba(180,140,255,0.2)',
+  waypoints:[[-20,120],[220,120],[220,420],[460,420],[460,140],[700,140],[700,560],[440,560],[440,780],[860,780],[860,940],[920,940]],
+  lives:25,
+  waveCount:Infinity,
+  bossFlavor:"He never really leaves this place. Why would he? You keep coming back too."
+};
 let currentMap = null;
 
 /* ---------- towers ---------- */
@@ -682,6 +693,41 @@ function generateWave(map, waveIndex){
     list.push({type:t, delay:i*(650 - Math.min(waveIndex*10,220))});
   }
   // scale stats via multiplier applied at spawn time using 'scale'
+  list.scaleFactor = scale;
+  return list;
+}
+
+const ENDLESS_BOSS_INTERVAL = 10;
+function generateEndlessWave(waveIndex){
+  const list = [];
+  if(waveIndex % ENDLESS_BOSS_INTERVAL === 0){
+    const defeats = save.claudeDefeats;
+    const cycle = waveIndex / ENDLESS_BOSS_INTERVAL;
+    const bossScale = (1 + cycle*0.55) * (1 + defeats*0.4);
+    list.push({
+      type:'boss',
+      hp: Math.round(520*bossScale),
+      speed: 0.6 + Math.min(defeats*0.03, 0.3),
+      reward: 120 + defeats*20 + cycle*15,
+      color: claudeColorFor(defeats),
+      r:26,
+      title: claudeTitleFor(defeats),
+      visualTier: Math.min(3, 1+defeats)
+    });
+    for(let i=0;i<Math.min(10, 4+cycle);i++) list.push({type:'whisper', delay:i*450});
+    return list;
+  }
+  const scale = 1 + (waveIndex-1)*0.12;
+  const pool = ['whisper'];
+  if(waveIndex >= 2) pool.push('screecher');
+  if(waveIndex >= 3) pool.push('chorusWisp');
+  if(waveIndex >= 4) pool.push('discordKnight');
+  if(waveIndex >= 5) pool.push('drone');
+  const n = 6 + Math.floor(waveIndex*0.9);
+  for(let i=0;i<n;i++){
+    const t = pool[Math.floor(Math.random()*pool.length)];
+    list.push({type:t, delay:i*Math.max(220, 600-waveIndex*8)});
+  }
   list.scaleFactor = scale;
   return list;
 }
@@ -1050,14 +1096,16 @@ function checkUnlocks(){
 function beginWave(){
   if(state.waveActive) return;
   state.waveNum++;
-  const list = generateWave(currentMap, state.waveNum);
+  const isEndless = currentMap.id==='endless';
+  const list = isEndless ? generateEndlessWave(state.waveNum) : generateWave(currentMap, state.waveNum);
   state.spawnQueue = list;
   state.spawnQueue.scaleFactor = list.scaleFactor||1;
   state.spawnTimer = 0;
   state.waveActive = true;
   state.bossEscaped = false;
   document.getElementById('startWaveBtn').disabled=true;
-  if(state.waveNum===currentMap.waveCount){
+  const isBossWave = isEndless ? (state.waveNum % ENDLESS_BOSS_INTERVAL === 0) : (state.waveNum===currentMap.waveCount);
+  if(isBossWave){
     showBanner(`${claudeTitleFor(save.claudeDefeats)} approaches`);
   }
   updateHud();
@@ -1736,7 +1784,7 @@ function updateHud(){
   const intEl = document.getElementById('integrityVal');
   intEl.textContent = Math.max(0,Math.round(state.integrity));
   intEl.parentElement.classList.toggle('low', state.integrity <= currentMap.lives*0.3);
-  document.getElementById('waveVal').textContent = `${state.waveNum}/${currentMap.waveCount}`;
+  document.getElementById('waveVal').textContent = currentMap.waveCount===Infinity ? `${state.waveNum}` : `${state.waveNum}/${currentMap.waveCount}`;
   buildToolbar();
 }
 
@@ -1872,19 +1920,44 @@ function showPaywall(){
       <input id="tokenInput" type="text" placeholder="Paste your Pro token" style="width:80%;max-width:320px;padding:8px 10px;border-radius:6px;border:1px solid #3a4570;background:#12162a;color:#e9e3d3;font-family:Georgia,serif;">
       <div><button id="restoreBtn" style="margin-top:10px;">Restore Purchase</button></div>
     </div>
+    <div style="margin-top:18px;">
+      <div style="font-size:0.8em;color:#8a93b8;font-style:italic;margin-bottom:6px;">Lost your token? We'll email it to you.</div>
+      <input id="emailInput" type="email" placeholder="Email used at purchase" style="width:80%;max-width:320px;padding:8px 10px;border-radius:6px;border:1px solid #3a4570;background:#12162a;color:#e9e3d3;font-family:Georgia,serif;">
+      <div><button id="emailRestoreBtn" style="margin-top:10px;">Email My Code</button></div>
+    </div>
     <div><button id="paywallBackBtn" style="margin-top:16px;background:none;border:1px solid #3a4570;color:#9aa3c0;padding:7px 18px;border-radius:16px;cursor:pointer;font-family:Georgia,serif;font-size:0.82em;font-style:italic;">Back to menu</button></div>`;
   document.getElementById('buyProBtn').onclick = beginProCheckout;
   document.getElementById('restoreBtn').onclick = async ()=>{
     const token = document.getElementById('tokenInput').value;
-    if(await validateProToken(token)){
+    const result = await validateProToken(token);
+    if(result.valid){
       save.pro = true;
       save.proToken = token.trim();
       writeSave(save);
       state.screen = 'menu';
       showModal();
+    } else if(result.reason === 'exhausted'){
+      showBanner('This token has reached its 10-restore limit. Contact support@scvd.app for help.');
     } else {
       showBanner('That token doesn\'t look right — check and try again.');
     }
+  };
+  document.getElementById('emailRestoreBtn').onclick = async ()=>{
+    const email = document.getElementById('emailInput').value.trim();
+    if(!email){ showBanner('Enter the email you used at purchase.'); return; }
+    if(!WORKER_URL){
+      showBanner("Checkout isn't wired up yet — this app has no payment Worker deployed.");
+      return;
+    }
+    try{
+      await fetch(`${WORKER_URL}/restore-by-email`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email })
+      });
+    }catch(e){ /* ignore — same message either way, see note below */ }
+    // Always the same message, whether or not that email actually purchased —
+    // the Worker never confirms or denies a match, so neither do we.
+    showBanner('If that email purchased Pro, a restore code is on its way.');
   };
   document.getElementById('paywallBackBtn').onclick = ()=>{ state.screen='menu'; showModal(); };
 }
@@ -1917,12 +1990,25 @@ function showModal(){
           }).join('')}</div>
         </div>`;
       }).join('')}
+      <div class="quest-block">
+        <div class="quest-head">The Warden's Gauntlet</div>
+        <div class="quest-desc">No quest, no ending — a proving ground to field and upgrade everything at once.</div>
+        <div class="maps">
+          <div class="map-card endless-card">
+            <h4>${ENDLESS_MAP.name}</h4>
+            <div class="mdesc">${ENDLESS_MAP.desc}</div>
+            ${save.best['endless'] ? `<div class="best">Best: wave ${save.best['endless']}</div>` : ''}
+          </div>
+        </div>
+      </div>
       <div><button id="menuArmoryBtn">View Field Manual</button>${save.pro
         ? ` <button id="menuSkinBtn">Skin: ${save.skin==='aurora'?'Aurora':'Classic'}</button>`
         : ' <button id="menuProBtn">Unlock Pro</button>'}</div>`;
-    box.querySelectorAll('.map-card:not(.locked)').forEach(el=>{
+    box.querySelectorAll('.map-card:not(.locked):not(.endless-card)').forEach(el=>{
       el.onclick = ()=> startMap(parseInt(el.dataset.map));
     });
+    const endlessCard = box.querySelector('.endless-card');
+    if(endlessCard) endlessCard.onclick = ()=> startMap('endless');
     document.getElementById('menuArmoryBtn').onclick = ()=> showArmory(()=> showModal());
     const proBtn = document.getElementById('menuProBtn');
     if(proBtn) proBtn.onclick = ()=> showPaywall();
@@ -1951,8 +2037,11 @@ function showModal(){
       });
     };
   } else if(state.screen==='defeat'){
+    const waveText = currentMap.waveCount===Infinity
+      ? `You held for ${state.waveNum} wave${state.waveNum===1?'':'s'} in ${currentMap.name}.`
+      : `Wave ${state.waveNum} of ${currentMap.waveCount} on ${currentMap.name}.`;
     box.innerHTML = `<h2>The Hall Falls Silent</h2>
-      <div class="flavor">Wave ${state.waveNum} of ${currentMap.waveCount} on ${currentMap.name}. The dissonance gets in, this time.</div>
+      <div class="flavor">${waveText} The dissonance gets in, this time.</div>
       <button class="primary" id="retryBtn">Try again</button>
       <button class="primary" id="menuBtn" style="margin-left:10px;">Map select</button>`;
     document.getElementById('retryBtn').onclick = ()=> startMap(currentMap.id);
@@ -1968,9 +2057,9 @@ function startMap(id){
     return;
   }
   consumeFreePlay();
-  currentMap = MAPS.find(m=>m.id===id);
+  currentMap = id==='endless' ? ENDLESS_MAP : MAPS.find(m=>m.id===id);
   state.screen='playing';
-  state.echoes = 140 + (id-1)*20;
+  state.echoes = id==='endless' ? 160 : 140 + (id-1)*20;
   state.integrity = currentMap.lives;
   state.waveNum = 0;
   state.towers = [];
