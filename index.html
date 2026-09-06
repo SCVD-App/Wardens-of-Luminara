@@ -194,17 +194,24 @@
       z-index:15;
       padding:14px 18px 18px;
     }
-    header{padding:8px 12px 4px; flex-wrap:wrap; row-gap:2px;}
-    .title-group{gap:6px; flex-wrap:wrap;}
-    h1{font-size:1.05em;}
+    header{padding:12px 16px 8px; flex-wrap:wrap; row-gap:6px;}
+    .title-group{gap:8px; flex-wrap:wrap;}
+    h1{font-size:1.3em;}
     h1 .sub{display:block; font-size:0.62em;}
-    #hud{gap:12px;font-size:0.78em;}
-    #exitToMenuBtn{padding:3px 9px; font-size:0.66em;}
-    #muteBtn{padding:3px 8px; font-size:0.75em;}
+    #hud{gap:16px;font-size:0.9em;}
+    #exitToMenuBtn{padding:4px 11px; font-size:0.72em;}
+    #muteBtn{padding:4px 10px; font-size:0.82em;}
   }
 
   #wave-controls{
     display:flex;gap:10px;align-items:center;margin-top:2px;
+  }
+  #endlessCountdown{
+    color:var(--hall-gold);
+    font-style:italic;
+    font-size:0.85em;
+    margin-top:6px;
+    text-shadow:0 0 8px rgba(232,179,76,0.4);
   }
   #startWaveBtn{
     background:linear-gradient(180deg,#2a2144,#1a1530);
@@ -356,6 +363,7 @@
     <button id="startWaveBtn">Begin Wave</button>
     <button id="speedBtn">▶ 1x</button>
   </div>
+  <div id="endlessCountdown" style="display:none;"></div>
   <footer>Echoes carry within a run · Hall Integrity resets each map · progress is saved to this browser</footer>
 </div>
 
@@ -930,7 +938,7 @@ let state = {
   bossTrail:[],
   resonance:0,
   resonanceTargeting:false,
-  autoWaveDeadline:0,
+  endlessCountdownDeadline:0,
   waveStartedAt:0,
   selectedBuild:null,
   selectedTower:null,
@@ -1012,25 +1020,13 @@ function generateWave(map, waveIndex){
   if(waveIndex >= 5) pool.push('drone');
   for(let i=0;i<n;i++){
     const t = pool[Math.floor(Math.random()*pool.length)];
-    list.push({type:t, delay:i*(650 - Math.min(waveIndex*10,220))});
+    list.push({type:t, delay:i*(650 - Math.min(waveIndex*10,220)), scale});
   }
-  // scale stats via multiplier applied at spawn time using 'scale'
-  list.scaleFactor = scale;
   return list;
 }
 
 const ENDLESS_BOSS_INTERVAL = 10;
-// Auto-release interval for endless mode: 30s before wave 1, tapering down
-// to a 15s floor by wave 50, then holding at 15s from there on.
-function endlessAutoWaveDelayMs(nextWaveIndex){
-  const t = Math.min(1, Math.max(0, (nextWaveIndex-1)/49));
-  const seconds = 30 - t*15;
-  return seconds*1000;
-}
-function scheduleAutoWave(nextWaveIndex){
-  if(!currentMap || currentMap.id!=='endless'){ state.autoWaveDeadline = 0; return; }
-  state.autoWaveDeadline = performance.now() + endlessAutoWaveDelayMs(nextWaveIndex);
-}
+const ENDLESS_WAVE_INTERVAL_MS = 5000; // flat 5s between auto-released waves in endless mode
 function generateEndlessWave(waveIndex){
   const list = [];
   if(waveIndex % ENDLESS_BOSS_INTERVAL === 0){
@@ -1059,9 +1055,8 @@ function generateEndlessWave(waveIndex){
   const n = 5 + waveIndex;
   for(let i=0;i<n;i++){
     const t = pool[Math.floor(Math.random()*pool.length)];
-    list.push({type:t, delay:i*Math.max(220, 600-waveIndex*8)});
+    list.push({type:t, delay:i*Math.max(220, 600-waveIndex*8), scale});
   }
-  list.scaleFactor = scale;
   return list;
 }
 
@@ -1207,7 +1202,7 @@ function tick(now){
     state.spawnTimer -= dt;
     while(state.spawnQueue.length && state.spawnTimer<=0){
       const spec = state.spawnQueue.shift();
-      spawnEnemy(spec, currentMap, state.spawnQueue.scaleFactor||1);
+      spawnEnemy(spec, currentMap, spec.scale||1);
       state.spawnTimer = (spec.delay!==undefined? Math.max(140,spec.delay*0.75) : 400);
     }
   }
@@ -1351,17 +1346,21 @@ function tick(now){
   }
   state.bossTrail = state.bossTrail.filter(p=>p.life>0);
 
-  // wave completion check
+  // wave completion check — endless mode skips the "cleared" banner/unlock flow
+  // entirely since waves overlap by design; best-wave tracking already happens
+  // per-call in beginWaveEndless(), not on a "cleared" event.
   if(state.waveActive && state.spawnQueue.length===0 && state.enemies.length===0){
     state.waveActive=false;
-    onWaveCleared();
+    if(currentMap.id!=='endless'){
+      onWaveCleared();
+    }
   }
 
   // safety valve: if a wave has been active for far longer than any wave should
   // reasonably take (e.g. an enemy permanently stun-locked so it never dies or
   // reaches the end), force any survivors through rather than soft-locking the
   // game forever. They still cost Hall Integrity — this isn't a free pass, just
-  // a guarantee the "Begin Wave" button can never get stuck disabled for good.
+  // a guarantee things can never get stuck for good.
   if(state.waveActive && state.spawnQueue.length===0 && state.enemies.length>0
      && state.waveStartedAt && (now - state.waveStartedAt) > 60000){
     for(const e of state.enemies){
@@ -1373,12 +1372,16 @@ function tick(now){
     }
     state.enemies = [];
     state.waveActive = false;
-    onWaveCleared();
+    if(currentMap.id!=='endless'){
+      onWaveCleared();
+    }
   }
 
-  // endless mode: auto-release the next wave once its countdown elapses
-  if(!state.waveActive && state.autoWaveDeadline && now >= state.autoWaveDeadline){
-    beginWave();
+  // endless mode: waves auto-release on a flat interval, always — regardless
+  // of whether the previous wave is still active. The button is always available
+  // too (see updateHud), so this is just the "if you don't call it yourself" fallback.
+  if(currentMap.id==='endless' && state.endlessCountdownDeadline && now >= state.endlessCountdownDeadline){
+    beginWaveEndless();
   }
 
   // Funky Claude's riff plays exactly while he's alive on the map
@@ -1460,16 +1463,6 @@ function onWaveCleared(){
   }
   showBanner(`Wave ${state.waveNum} cleared`);
   document.getElementById('startWaveBtn').disabled=false;
-  // Guarantee at least a short breathing gap before the next auto-release, even if
-  // that wave's release-based deadline (scheduled back when THIS wave started) has
-  // already passed — otherwise a wave that takes longer than its interval to clear
-  // chains straight into the next one with zero window to build or upgrade.
-  if(currentMap.id==='endless'){
-    const minGapDeadline = performance.now() + 3000;
-    if(!state.autoWaveDeadline || state.autoWaveDeadline < minGapDeadline){
-      state.autoWaveDeadline = minGapDeadline;
-    }
-  }
   checkUnlocks();
   updateHud();
 }
@@ -1477,23 +1470,44 @@ function checkUnlocks(){
   buildToolbar();
 }
 function beginWave(){
+  if(currentMap.id==='endless'){
+    beginWaveEndless();
+    return;
+  }
   if(state.waveActive) return;
   state.waveNum++;
-  state.autoWaveDeadline = 0;
   state.waveStartedAt = performance.now();
-  const isEndless = currentMap.id==='endless';
-  scheduleAutoWave(state.waveNum+1); // countdown for the NEXT wave starts now, at this wave's release
-  const list = isEndless ? generateEndlessWave(state.waveNum) : generateWave(currentMap, state.waveNum);
+  const list = generateWave(currentMap, state.waveNum);
   state.spawnQueue = list;
-  state.spawnQueue.scaleFactor = list.scaleFactor||1;
   state.spawnTimer = 0;
   state.waveActive = true;
   state.bossEscaped = false;
   document.getElementById('startWaveBtn').disabled=true;
-  const isBossWave = isEndless ? (state.waveNum % ENDLESS_BOSS_INTERVAL === 0) : (state.waveNum===currentMap.waveCount);
+  const isBossWave = (state.waveNum===currentMap.waveCount);
   if(isBossWave){
     showBanner(`${claudeTitleFor(save.claudeDefeats)} approaches`);
   }
+  updateHud();
+}
+// Endless mode: waves stack on top of whatever's still alive rather than
+// gating on the previous one clearing first — the button is always available,
+// calling it in just layers more enemies onto the existing queue. Difficulty
+// scaling travels with each spawned enemy individually (spec.scale) so waves
+// with different difficulty can coexist correctly mid-overlap.
+function beginWaveEndless(){
+  state.waveNum++;
+  state.waveStartedAt = performance.now();
+  const list = generateEndlessWave(state.waveNum);
+  state.spawnQueue = state.spawnQueue.concat(list);
+  state.waveActive = true;
+  state.bossEscaped = false;
+  const isBossWave = (state.waveNum % ENDLESS_BOSS_INTERVAL === 0);
+  if(isBossWave){
+    showBanner(`${claudeTitleFor(save.claudeDefeats)} approaches`);
+  }
+  save.best['endless'] = Math.max(save.best['endless']||0, state.waveNum);
+  writeSave(save);
+  state.endlessCountdownDeadline = performance.now() + ENDLESS_WAVE_INTERVAL_MS;
   updateHud();
 }
 function endRun(won){
@@ -2182,13 +2196,20 @@ function updateHud(){
   intEl.parentElement.classList.toggle('low', state.integrity <= currentMap.lives*0.3);
   document.getElementById('waveVal').textContent = currentMap.waveCount===Infinity ? `${state.waveNum}` : `${state.waveNum}/${currentMap.waveCount}`;
   const startBtn = document.getElementById('startWaveBtn');
-  if(state.waveActive){
-    startBtn.textContent = 'Wave in progress…';
-  } else if(state.autoWaveDeadline){
-    const secs = Math.max(0, Math.ceil((state.autoWaveDeadline-performance.now())/1000));
-    startBtn.textContent = `Begin Wave (auto in ${secs}s)`;
+  const countdownEl = document.getElementById('endlessCountdown');
+  if(currentMap.id==='endless'){
+    startBtn.disabled = false;
+    startBtn.textContent = state.waveNum===0 ? 'Call First Wave' : 'Call Next Wave';
+    const secs = Math.max(0, Math.ceil((state.endlessCountdownDeadline-performance.now())/1000));
+    countdownEl.textContent = secs>0 ? `Next wave in ${secs}…` : '';
+    countdownEl.style.display = '';
   } else {
-    startBtn.textContent = 'Begin Wave';
+    countdownEl.style.display = 'none';
+    if(state.waveActive){
+      startBtn.textContent = 'Wave in progress…';
+    } else {
+      startBtn.textContent = 'Begin Wave';
+    }
   }
   buildToolbar();
 }
@@ -2520,7 +2541,7 @@ function startMap(id){
   state.waveActive=false;
   state.spawnQueue=[];
   state.hudRefresh=0;
-  scheduleAutoWave(1);
+  state.endlessCountdownDeadline = id==='endless' ? (performance.now() + ENDLESS_WAVE_INTERVAL_MS) : 0;
   hideModal();
   hideSidePanel();
   updateHud();
