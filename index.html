@@ -1009,7 +1009,7 @@ function generateWave(map, waveIndex){
       visualTier: Math.min(3, 1+defeats)
     });
     // small escort, a little bigger each time he's been beaten before
-    for(let i=0;i<Math.min(8, 3+map.id+Math.min(defeats,4)); i++) list.push({type:'whisper', delay:i*500});
+    for(let i=0;i<Math.min(8, 3+map.id+Math.min(defeats,4)); i++) list.push({type:'whisper', delay:500});
     return list;
   }
   const n = 5 + waveIndex + Math.floor((map.id-1)*0.8);
@@ -1020,7 +1020,7 @@ function generateWave(map, waveIndex){
   if(waveIndex >= 5) pool.push('drone');
   for(let i=0;i<n;i++){
     const t = pool[Math.floor(Math.random()*pool.length)];
-    list.push({type:t, delay:i*(650 - Math.min(waveIndex*10,220)), scale});
+    list.push({type:t, delay:650 - Math.min(waveIndex*10,220), scale});
   }
   return list;
 }
@@ -1043,7 +1043,7 @@ function generateEndlessWave(waveIndex){
       title: claudeTitleFor(defeats),
       visualTier: Math.min(3, 1+defeats)
     });
-    for(let i=0;i<Math.min(10, 4+cycle);i++) list.push({type:'whisper', delay:i*450});
+    for(let i=0;i<Math.min(10, 4+cycle);i++) list.push({type:'whisper', delay:450});
     return list;
   }
   const scale = 1 + (waveIndex-1)*0.12;
@@ -1055,7 +1055,7 @@ function generateEndlessWave(waveIndex){
   const n = Math.min(40, 5 + waveIndex);
   for(let i=0;i<n;i++){
     const t = pool[Math.floor(Math.random()*pool.length)];
-    list.push({type:t, delay:i*Math.max(220, 600-waveIndex*8), scale});
+    list.push({type:t, delay:Math.max(220, 600-waveIndex*8), scale});
   }
   return list;
 }
@@ -1203,7 +1203,7 @@ function tick(now){
     while(state.spawnQueue.length && state.spawnTimer<=0){
       const spec = state.spawnQueue.shift();
       spawnEnemy(spec, currentMap, spec.scale||1);
-      state.spawnTimer = (spec.delay!==undefined? Math.max(140,spec.delay*0.75) : 400);
+      state.spawnTimer = (spec.delay!==undefined? Math.max(100,spec.delay*0.6) : 300);
     }
   }
 
