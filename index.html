@@ -568,8 +568,6 @@ const TOWERS = {
     desc:"Harmonic pulse, hits all nearby.", air:false, ground:true },
   piercer:{ key:'piercer', name:'Discord Piercer', cost:130, range:150, rate:1500, dmg:46, pierceArmor:true, color:'#d84fa0',
     desc:"Slow, brutal, ignores armor.", air:false, ground:true },
-  lyre:{ key:'lyre', name:'Skywatch Lyre', cost:85, range:150, rate:750, dmg:15, color:'#8ee8c3',
-    desc:"Only strikes what flies.", air:true, ground:false },
   baton:{ key:'baton', name:"Valdric's Baton", cost:160, range:100, rate:0, support:true, color:'#f4e285',
     desc:"Auras nearby towers: +25% rate/range.", unlockWave:6 },
   mothers:{ key:'mothers', name:'The Mothers', cost:140, range:110, rate:0, support:true, color:'#b084f0',
@@ -582,7 +580,7 @@ const TOWERS = {
     desc:"A resonant pulse that bounces between enemies.", air:true, ground:true,
     chain:3, chainFalloff:0.65, chainRange:140, proOnly:true }
 };
-const TOWER_ORDER = ['spire','bloom','piercer','lyre','baton','mothers','rds','vael','echo'];
+const TOWER_ORDER = ['spire','bloom','piercer','baton','mothers','rds','vael','echo'];
 
 /* ---------- enemies ---------- */
 const ENEMY_DEFS = {
@@ -610,6 +608,7 @@ let state = {
   bossTrail:[],
   resonance:0,
   resonanceTargeting:false,
+  autoWaveDeadline:0,
   selectedBuild:null,
   selectedTower:null,
   waveActive:false,
@@ -698,6 +697,17 @@ function generateWave(map, waveIndex){
 }
 
 const ENDLESS_BOSS_INTERVAL = 10;
+// Auto-release interval for endless mode: 30s before wave 1, tapering down
+// to a 15s floor by wave 50, then holding at 15s from there on.
+function endlessAutoWaveDelayMs(nextWaveIndex){
+  const t = Math.min(1, Math.max(0, (nextWaveIndex-1)/49));
+  const seconds = 30 - t*15;
+  return seconds*1000;
+}
+function scheduleAutoWave(nextWaveIndex){
+  if(!currentMap || currentMap.id!=='endless'){ state.autoWaveDeadline = 0; return; }
+  state.autoWaveDeadline = performance.now() + endlessAutoWaveDelayMs(nextWaveIndex);
+}
 function generateEndlessWave(waveIndex){
   const list = [];
   if(waveIndex % ENDLESS_BOSS_INTERVAL === 0){
@@ -723,7 +733,7 @@ function generateEndlessWave(waveIndex){
   if(waveIndex >= 3) pool.push('chorusWisp');
   if(waveIndex >= 4) pool.push('discordKnight');
   if(waveIndex >= 5) pool.push('drone');
-  const n = 6 + Math.floor(waveIndex*0.9);
+  const n = 5 + waveIndex;
   for(let i=0;i<n;i++){
     const t = pool[Math.floor(Math.random()*pool.length)];
     list.push({type:t, delay:i*Math.max(220, 600-waveIndex*8)});
@@ -1017,6 +1027,11 @@ function tick(now){
     onWaveCleared();
   }
 
+  // endless mode: auto-release the next wave once its countdown elapses
+  if(!state.waveActive && state.autoWaveDeadline && now >= state.autoWaveDeadline){
+    beginWave();
+  }
+
   // live HUD refresh so echoes earned mid-wave immediately unlock purchases/upgrades
   state.hudRefresh = (state.hudRefresh||0) - dt;
   if(state.hudRefresh<=0){
@@ -1087,6 +1102,7 @@ function onWaveCleared(){
   }
   showBanner(`Wave ${state.waveNum} cleared`);
   document.getElementById('startWaveBtn').disabled=false;
+  scheduleAutoWave(state.waveNum+1);
   checkUnlocks();
   updateHud();
 }
@@ -1096,6 +1112,7 @@ function checkUnlocks(){
 function beginWave(){
   if(state.waveActive) return;
   state.waveNum++;
+  state.autoWaveDeadline = 0;
   const isEndless = currentMap.id==='endless';
   const list = isEndless ? generateEndlessWave(state.waveNum) : generateWave(currentMap, state.waveNum);
   state.spawnQueue = list;
@@ -1643,7 +1660,7 @@ canvas.addEventListener('click', (ev)=>{
   if(state.resonanceTargeting){
     let hit = null;
     for(const t of state.towers){
-      if(Math.hypot(t.x-x,t.y-y) < 18){ hit=t; break; }
+      if(Math.hypot(t.x-x,t.y-y) < 40){ hit=t; break; }
     }
     if(hit && TOWERS[hit.key].support){
       showBanner("Support towers can't be empowered");
@@ -1675,7 +1692,7 @@ canvas.addEventListener('click', (ev)=>{
   // select existing tower, or combine with the currently selected one
   let hit = null;
   for(const t of state.towers){
-    if(Math.hypot(t.x-x,t.y-y) < 18){ hit=t; break; }
+    if(Math.hypot(t.x-x,t.y-y) < 40){ hit=t; break; }
   }
   if(hit && state.selectedTower && hit!==state.selectedTower){
     const result = tryCombine(state.selectedTower, hit);
@@ -1686,8 +1703,10 @@ canvas.addEventListener('click', (ev)=>{
       updateHud();
       showBanner(result.message);
       return;
-    } else if(hit.key===state.selectedTower.key && !TOWERS[hit.key].support){
-      const reasonText = result.reason==='tier'
+    } else if(hit.key===state.selectedTower.key){
+      const reasonText = result.reason==='support'
+        ? "Support towers can't be fused"
+        : result.reason==='tier'
         ? "Towers must match tier to fuse"
         : "Already at max barrels";
       showBanner(reasonText);
@@ -1711,7 +1730,7 @@ function showSidePanel(t){
   document.getElementById('spRate').textContent = TOWERS[t.key].support ? '—' : (stats.rate/1000).toFixed(2)+'s';
   const hintEl = document.getElementById('spCombineHint');
   if(TOWERS[t.key].support){
-    hintEl.textContent = '';
+    hintEl.textContent = "Support aura — can't be upgraded or fused.";
   } else if(barrels>=MAX_BARRELS){
     hintEl.textContent = 'Fully fused — max barrels reached.';
   } else {
@@ -1723,15 +1742,21 @@ function showSidePanel(t){
   }
   const upgradeCost = Math.round(TOWERS[t.key].cost * 0.7 * t.tier * (1 + (barrels-1)*0.5));
   const upBtn = document.getElementById('upgradeBtn');
-  upBtn.textContent = t.tier>=3 ? 'Max tier' : `Upgrade (${upgradeCost} echoes)`;
-  upBtn.disabled = t.tier>=3 || state.echoes<upgradeCost;
-  upBtn.onclick = ()=>{
-    if(t.tier>=3 || state.echoes<upgradeCost) return;
-    state.echoes -= upgradeCost;
-    t.tier++;
-    showSidePanel(t);
-    updateHud();
-  };
+  if(TOWERS[t.key].support){
+    upBtn.textContent = "Support — no upgrades";
+    upBtn.disabled = true;
+    upBtn.onclick = null;
+  } else {
+    upBtn.textContent = t.tier>=3 ? 'Max tier' : `Upgrade (${upgradeCost} echoes)`;
+    upBtn.disabled = t.tier>=3 || state.echoes<upgradeCost;
+    upBtn.onclick = ()=>{
+      if(t.tier>=3 || state.echoes<upgradeCost) return;
+      state.echoes -= upgradeCost;
+      t.tier++;
+      showSidePanel(t);
+      updateHud();
+    };
+  }
   const sellVal = Math.round(TOWERS[t.key].cost*0.5*t.tier*barrels);
   document.getElementById('sellBtn').textContent = `Sell (+${sellVal})`;
   document.getElementById('sellBtn').onclick = ()=>{
@@ -1785,6 +1810,13 @@ function updateHud(){
   intEl.textContent = Math.max(0,Math.round(state.integrity));
   intEl.parentElement.classList.toggle('low', state.integrity <= currentMap.lives*0.3);
   document.getElementById('waveVal').textContent = currentMap.waveCount===Infinity ? `${state.waveNum}` : `${state.waveNum}/${currentMap.waveCount}`;
+  const startBtn = document.getElementById('startWaveBtn');
+  if(!state.waveActive && state.autoWaveDeadline){
+    const secs = Math.max(0, Math.ceil((state.autoWaveDeadline-performance.now())/1000));
+    startBtn.textContent = `Begin Wave (auto in ${secs}s)`;
+  } else if(!state.waveActive){
+    startBtn.textContent = 'Begin Wave';
+  }
   buildToolbar();
 }
 
@@ -2075,6 +2107,7 @@ function startMap(id){
   state.waveActive=false;
   state.spawnQueue=[];
   state.hudRefresh=0;
+  scheduleAutoWave(1);
   hideModal();
   hideSidePanel();
   updateHud();
