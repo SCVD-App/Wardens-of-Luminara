@@ -1052,7 +1052,7 @@ function generateEndlessWave(waveIndex){
   if(waveIndex >= 3) pool.push('chorusWisp');
   if(waveIndex >= 4) pool.push('discordKnight');
   if(waveIndex >= 5) pool.push('drone');
-  const n = 5 + waveIndex;
+  const n = Math.min(40, 5 + waveIndex);
   for(let i=0;i<n;i++){
     const t = pool[Math.floor(Math.random()*pool.length)];
     list.push({type:t, delay:i*Math.max(220, 600-waveIndex*8), scale});
@@ -1494,7 +1494,14 @@ function beginWave(){
 // calling it in just layers more enemies onto the existing queue. Difficulty
 // scaling travels with each spawned enemy individually (spec.scale) so waves
 // with different difficulty can coexist correctly mid-overlap.
+const ENDLESS_MAX_BACKLOG = 25; // spawn queue can never outrun what can actually appear on screen
 function beginWaveEndless(){
+  const backlog = state.spawnQueue.length + state.enemies.filter(e=>e.hp>0).length;
+  if(backlog >= ENDLESS_MAX_BACKLOG){
+    showBanner("Too many on the field — let some through or clear a few first");
+    state.endlessCountdownDeadline = performance.now() + 2000; // retry soon rather than spam
+    return;
+  }
   state.waveNum++;
   state.waveStartedAt = performance.now();
   const list = generateEndlessWave(state.waveNum);
