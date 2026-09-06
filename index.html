@@ -1411,23 +1411,66 @@ function applyAoE(t, center, dmg, radius, ignoreArmor){
     }
   }
 }
+function drawFireBeam(ctx2, x1, y1, x2, y2, color, thicknessScale){
+  thicknessScale = thicknessScale || 1;
+  ctx2.save();
+  ctx2.lineCap = 'round';
+  ctx2.beginPath();
+  ctx2.moveTo(x1,y1);
+  ctx2.lineTo(x2,y2);
+  // outer glow
+  ctx2.strokeStyle = color;
+  ctx2.shadowColor = color;
+  ctx2.globalAlpha = 0.35;
+  ctx2.shadowBlur = 14*thicknessScale;
+  ctx2.lineWidth = 16*thicknessScale;
+  ctx2.stroke();
+  // mid body
+  ctx2.globalAlpha = 0.75;
+  ctx2.shadowBlur = 6*thicknessScale;
+  ctx2.lineWidth = 8*thicknessScale;
+  ctx2.stroke();
+  // bright core
+  ctx2.globalAlpha = 0.95;
+  ctx2.shadowBlur = 0;
+  ctx2.lineWidth = 3*thicknessScale;
+  ctx2.strokeStyle = '#fff8e0';
+  ctx2.stroke();
+  ctx2.restore();
+}
 function drawLightningBolt(ctx2, x1, y1, x2, y2, color){
   const segments = 5;
   const dx = (x2-x1)/segments, dy = (y2-y1)/segments;
+  const pts = [[x1,y1]];
+  for(let i=1;i<segments;i++){
+    pts.push([x1+dx*i + (Math.random()-0.5)*14, y1+dy*i + (Math.random()-0.5)*14]);
+  }
+  pts.push([x2,y2]);
   ctx2.save();
+  ctx2.lineCap = 'round';
+  ctx2.lineJoin = 'round';
   ctx2.strokeStyle = color;
   ctx2.shadowColor = color;
-  ctx2.shadowBlur = 10;
-  ctx2.lineWidth = 2.5;
+  const drawPath = ()=>{
+    ctx2.beginPath();
+    ctx2.moveTo(pts[0][0], pts[0][1]);
+    for(let i=1;i<pts.length;i++) ctx2.lineTo(pts[i][0], pts[i][1]);
+  };
+  drawPath();
+  ctx2.globalAlpha = 0.4;
+  ctx2.shadowBlur = 16;
+  ctx2.lineWidth = 11;
+  ctx2.stroke();
+  drawPath();
   ctx2.globalAlpha = 0.85;
-  ctx2.beginPath();
-  ctx2.moveTo(x1,y1);
-  for(let i=1;i<segments;i++){
-    const px = x1+dx*i + (Math.random()-0.5)*14;
-    const py = y1+dy*i + (Math.random()-0.5)*14;
-    ctx2.lineTo(px,py);
-  }
-  ctx2.lineTo(x2,y2);
+  ctx2.shadowBlur = 8;
+  ctx2.lineWidth = 6;
+  ctx2.stroke();
+  drawPath();
+  ctx2.globalAlpha = 0.95;
+  ctx2.shadowBlur = 0;
+  ctx2.lineWidth = 2.5;
+  ctx2.strokeStyle = '#fff8e0';
   ctx2.stroke();
   ctx2.restore();
 }
@@ -1520,6 +1563,7 @@ function beginWaveEndless(manual){
 function endRun(won){
   stopClaudeRiff();
   stopAllEnemyDrones();
+  state.bossAlive = false;
   state.screen = won ? 'mapComplete' : 'defeat';
   if(won && save.unlocked <= currentMap.id && currentMap.id < MAPS.length){
     save.unlocked = currentMap.id+1;
@@ -1848,7 +1892,7 @@ function render(){
     }
     const flashing = t.flashUntil && t.flashUntil>performance.now();
     const barrels = t.combined||1;
-    const size = 11 + t.tier*2.5;
+    const size = 13 + t.tier*3;
     const auroraOn = save.pro && save.skin==='aurora';
     const towerSeed = ((t.x*7 + t.y*13) % 100) / 100;
     const displayColor = auroraOn ? auroraColor(towerSeed, performance.now(), hexToHue(TOWERS[t.key].color)) : TOWERS[t.key].color;
@@ -1914,21 +1958,18 @@ function render(){
       const target = t.targetRef;
       if(t.key==='vael'){
         drawLightningBolt(ctx, t.x, t.y, target.x, target.y, displayColor);
-      } else {
+      } else if(barrels>=3){
+        // triple-fused: one solid, noticeably thicker beam rather than three separate lines
+        drawFireBeam(ctx, t.x, t.y, target.x, target.y, displayColor, 1.6);
+      } else if(barrels===2){
+        // twin barrels: slight separation, each still a full thick beam
         const dx = target.x-t.x, dy = target.y-t.y;
         const len = Math.hypot(dx,dy)||1;
-        const px = -dy/len, py = dx/len;
-        for(let b=0;b<barrels;b++){
-          const off = barrels>1 ? (b-(barrels-1)/2)*7 : 0;
-          ctx.beginPath();
-          ctx.moveTo(t.x+px*off, t.y+py*off);
-          ctx.lineTo(target.x+px*off, target.y+py*off);
-          ctx.strokeStyle = displayColor;
-          ctx.globalAlpha=0.6;
-          ctx.lineWidth=2;
-          ctx.stroke();
-          ctx.globalAlpha=1;
-        }
+        const px = -dy/len, py = dx/len, off = 5;
+        drawFireBeam(ctx, t.x+px*off, t.y+py*off, target.x+px*off, target.y+py*off, displayColor, 1);
+        drawFireBeam(ctx, t.x-px*off, t.y-py*off, target.x-px*off, target.y-py*off, displayColor, 1);
+      } else {
+        drawFireBeam(ctx, t.x, t.y, target.x, target.y, displayColor, 1);
       }
     }
   }
@@ -2539,6 +2580,8 @@ function startMap(id){
   state.popups = [];
   state.watermark = generateWatermark(currentMap);
   state.bossTrail = [];
+  state.bossAlive = false;
+  state.bossEscaped = false;
   stopClaudeRiff();
   stopAllEnemyDrones();
   state.resonance = 0;
