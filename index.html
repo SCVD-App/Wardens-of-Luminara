@@ -194,9 +194,13 @@
       z-index:15;
       padding:14px 18px 18px;
     }
-    header{padding:10px 14px 4px;}
-    h1{font-size:1.2em;}
-    #hud{gap:14px;font-size:0.85em;}
+    header{padding:8px 12px 4px; flex-wrap:wrap; row-gap:2px;}
+    .title-group{gap:6px; flex-wrap:wrap;}
+    h1{font-size:1.05em;}
+    h1 .sub{display:block; font-size:0.62em;}
+    #hud{gap:12px;font-size:0.78em;}
+    #exitToMenuBtn{padding:3px 9px; font-size:0.66em;}
+    #muteBtn{padding:3px 8px; font-size:0.75em;}
   }
 
   #wave-controls{
@@ -298,7 +302,7 @@
     pointer-events:none;opacity:0;transition:opacity .4s;font-style:italic;text-align:center;
   }
   #banner.show{opacity:1;}
-  footer{color:#5b6488;font-size:0.7em;margin:8px 0 14px;font-style:italic;}
+  footer{color:#5b6488;font-size:0.62em;margin:4px 0 8px;font-style:italic;}
 
   #breachGlow{
     position:fixed;inset:0;pointer-events:none;z-index:30;
@@ -1228,7 +1232,7 @@ function tick(now){
       if(e.isBoss){ state.bossEscaped = true; state.bossAlive = false; }
       spawnParticle(e.x,e.y,'#ff4444',10);
       triggerBreachGlow(e.isBoss);
-      playBreachCrash();
+      try{ playBreachCrash(); }catch(err){ /* audio must never be able to stall the game loop */ }
       if(e.isBoss) triggerShake(now, 16, 550);
     }
   }
@@ -1272,10 +1276,12 @@ function tick(now){
     t.cooldown = stats.rate;
     t.flashUntil = now+120;
     t.targetRef = target;
-    playTowerFireSound(t.key, t.tier);
-    if(t.resonanceBoost && t.resonanceBoost.until > now){
-      playPinchHarmonic(TOWER_NOTE_HZ[t.key] || 440);
-    }
+    try{
+      playTowerFireSound(t.key, t.tier);
+      if(t.resonanceBoost && t.resonanceBoost.until > now){
+        playPinchHarmonic(TOWER_NOTE_HZ[t.key] || 440);
+      }
+    }catch(e){ /* audio must never be able to stall the game loop */ }
     for(let b=0;b<barrels;b++){
       if(t.key==='rds'){
         const rdsPowerMul = (t.resonanceBoost && t.resonanceBoost.until > now) ? 2 : 1;
@@ -1356,11 +1362,13 @@ function tick(now){
   }
 
   // Funky Claude's riff plays exactly while he's alive on the map
-  if(state.bossAlive && !claudeRiff.playing) startClaudeRiff();
-  else if(!state.bossAlive && claudeRiff.playing) stopClaudeRiff();
+  try{
+    if(state.bossAlive && !claudeRiff.playing) startClaudeRiff();
+    else if(!state.bossAlive && claudeRiff.playing) stopClaudeRiff();
+  }catch(e){ /* audio must never be able to stall the game loop */ }
 
   // one sustained chord tone per adversary type, live only while that type is on the map
-  updateEnemyDrones();
+  try{ updateEnemyDrones(); }catch(e){ /* audio must never be able to stall the game loop */ }
 
   // live HUD refresh so echoes earned mid-wave immediately unlock purchases/upgrades
   state.hudRefresh = (state.hudRefresh||0) - dt;
@@ -1370,7 +1378,7 @@ function tick(now){
     if(state.selectedTower) showSidePanel(state.selectedTower);
   }
 
-  render();
+  try{ render(); }catch(e){ /* a render glitch should never be able to stall the game loop */ }
 }
 function applyAoE(t, center, dmg, radius, ignoreArmor){
   for(const e of state.enemies){
