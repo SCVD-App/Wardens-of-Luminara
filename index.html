@@ -136,11 +136,11 @@
     background:linear-gradient(180deg,#1a2038,#12162a);
     border:1px solid #313a5c;
     border-radius:6px;
-    padding:6px 9px;
+    padding:5px 8px;
     color:var(--parchment);
     cursor:pointer;
     text-align:left;
-    min-width:102px;
+    min-width:90px;
     transition:border-color .15s, transform .1s;
     font-family:Georgia,serif;
     position:relative;
@@ -148,8 +148,8 @@
   .tower-btn:hover{border-color:var(--resonance);transform:translateY(-1px);}
   .tower-btn.selected{border-color:var(--hall-gold);box-shadow:0 0 12px rgba(232,179,76,0.35);}
   .tower-btn.disabled{opacity:0.35;cursor:not-allowed;pointer-events:none;}
-  .tower-btn .tname{font-size:0.85em;color:var(--parchment);}
-  .tower-btn .tcost{font-size:0.78em;color:var(--hall-gold);}
+  .tower-btn .tname{font-size:0.78em;color:var(--parchment);}
+  .tower-btn .tcost{font-size:0.72em;color:var(--hall-gold);}
   .tower-btn .tswatch{
     width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;
     box-shadow:0 0 6px currentColor;
@@ -210,11 +210,11 @@
     background:linear-gradient(180deg,#2a2144,#1a1530);
     border:1px solid var(--hall-gold);
     color:var(--hall-gold);
-    padding:9px 20px;
+    padding:7px 18px;
     border-radius:20px;
     cursor:pointer;
     font-family:Georgia,serif;
-    font-size:0.95em;
+    font-size:0.88em;
     letter-spacing:0.03em;
   }
   #startWaveBtn:hover{box-shadow:0 0 14px rgba(232,179,76,0.4);}
@@ -335,7 +335,7 @@
   </header>
 
   <div id="stage-wrap">
-    <canvas id="game" width="900" height="1000"></canvas>
+    <canvas id="game" width="900" height="820"></canvas>
     <div id="banner"></div>
     <div id="sidepanel">
       <h3 id="spName">Tower</h3>
@@ -775,7 +775,7 @@ const MAPS = [
     desc:"Quiet approach lanes above Geneva Constellation.",
     bg:['#141a30','#0a0d1a'],
     pathColor:'rgba(79,216,232,0.18)',
-    waypoints:[[-20,161],[220,161],[220,500],[520,500],[520,214],[760,214],[760,786],[920,786]],
+    waypoints:[[-20,132],[220,132],[220,410],[520,410],[520,175],[760,175],[760,645],[920,645]],
     lives:20,
     waveCount:8,
     bossFlavor:"He's here already, somehow — nobody can explain it. The Outer Ring smells faintly of smoke."
@@ -786,7 +786,7 @@ const MAPS = [
     desc:"The lake glows strange here. Dusk never quite finishes.",
     bg:['#241a30','#120a1a'],
     pathColor:'rgba(216,79,160,0.18)',
-    waypoints:[[-20,857],[160,857],[160,321],[380,321],[380,714],[600,714],[600,143],[820,143],[820,536],[920,536]],
+    waypoints:[[-20,703],[160,703],[160,263],[380,263],[380,585],[600,585],[600,117],[820,117],[820,440],[920,440]],
     lives:18,
     waveCount:9,
     bossFlavor:"Montreux again. Of course. He never really left the lake."
@@ -797,7 +797,7 @@ const MAPS = [
     desc:"Somewhere below, a stage, a fire, and the Mothers of Invention mid-set.",
     bg:['#301a12','#1a0d08'],
     pathColor:'rgba(255,106,61,0.2)',
-    waypoints:[[-20,536],[200,536],[200,143],[450,143],[450,929],[700,929],[700,393],[920,393]],
+    waypoints:[[-20,440],[200,440],[200,117],[450,117],[450,762],[700,762],[700,322],[920,322]],
     lives:16,
     waveCount:10,
     bossFlavor:"Back where it started. The Casino, the fire, the man himself — turned all the way up."
@@ -808,7 +808,7 @@ const MAPS = [
     desc:"Derelict relay stations drift in silence here, still humming with old resonance.",
     bg:['#16223a','#0a1220'],
     pathColor:'rgba(110,200,255,0.18)',
-    waypoints:[[-20,107],[200,107],[200,393],[420,393],[420,107],[640,107],[640,536],[860,536],[860,214],[920,214]],
+    waypoints:[[-20,88],[200,88],[200,322],[420,322],[420,88],[640,88],[640,440],[860,440],[860,175],[920,175]],
     lives:16,
     waveCount:9,
     bossFlavor:"Something rides the dead relays now, wearing static like a second skin."
@@ -819,7 +819,7 @@ const MAPS = [
     desc:"A tear in the Constellation's harmony — the deeper you go, the less it sounds like music.",
     bg:['#241530','#100816'],
     pathColor:'rgba(200,90,220,0.18)',
-    waypoints:[[-20,714],[140,714],[140,286],[320,286],[320,857],[500,857],[500,143],[680,143],[680,714],[860,714],[860,393],[920,393]],
+    waypoints:[[-20,585],[140,585],[140,235],[320,235],[320,703],[500,703],[500,117],[680,117],[680,585],[860,585],[860,322],[920,322]],
     lives:15,
     waveCount:10,
     bossFlavor:"He doesn't so much arrive here as bleed through the tear."
@@ -830,7 +830,7 @@ const MAPS = [
     desc:"Master Valdric Noir's old records, half-burned, half-remembered.",
     bg:['#2a2418','#14100a'],
     pathColor:'rgba(244,226,133,0.2)',
-    waypoints:[[-20,214],[260,214],[260,607],[60,607],[60,929],[440,929],[440,464],[680,464],[680,107],[920,107]],
+    waypoints:[[-20,175],[260,175],[260,498],[60,498],[60,762],[440,762],[440,380],[680,380],[680,88],[920,88]],
     lives:14,
     waveCount:11,
     bossFlavor:"The Archive keeps every performance it ever recorded. Apparently that includes him."
@@ -841,7 +841,7 @@ const MAPS = [
     desc:"What's left of a choir hall after its own resonance turned against it.",
     bg:['#221535','#0e0818'],
     pathColor:'rgba(150,90,255,0.18)',
-    waypoints:[[-20,893],[180,893],[180,429],[380,429],[380,893],[560,893],[560,179],[760,179],[760,679],[920,679]],
+    waypoints:[[-20,732],[180,732],[180,352],[380,352],[380,732],[560,732],[560,147],[760,147],[760,557],[920,557]],
     lives:14,
     waveCount:11,
     bossFlavor:"The Chorus never really stopped singing. It just started screaming instead."
@@ -852,7 +852,7 @@ const MAPS = [
     desc:"Where the Casino fire's last embers never quite went out.",
     bg:['#301a10','#180a06'],
     pathColor:'rgba(255,120,60,0.2)',
-    waypoints:[[-20,143],[120,143],[120,536],[300,536],[300,143],[480,143],[480,821],[660,821],[660,321],[860,321],[860,750],[920,750]],
+    waypoints:[[-20,117],[120,117],[120,440],[300,440],[300,117],[480,117],[480,673],[660,673],[660,263],[860,263],[860,615],[920,615]],
     lives:13,
     waveCount:12,
     bossFlavor:"He's more comfortable in embers than anywhere else in the Constellation."
@@ -863,7 +863,7 @@ const MAPS = [
     desc:"The Grand Resonance Hall's innermost chamber. If the Hall falls, it falls here.",
     bg:['#332a1c','#15120c'],
     pathColor:'rgba(255,215,120,0.22)',
-    waypoints:[[-20,536],[140,536],[140,143],[320,143],[320,893],[500,893],[500,250],[680,250],[680,786],[860,786],[860,429],[920,429]],
+    waypoints:[[-20,440],[140,440],[140,117],[320,117],[320,732],[500,732],[500,205],[680,205],[680,645],[860,645],[860,352],[920,352]],
     lives:12,
     waveCount:13,
     bossFlavor:"Every version of him that ever got away is standing behind this one."
@@ -875,7 +875,7 @@ const ENDLESS_MAP = {
   desc:"No finish line. Just the Hall, the waves, and however long you can hold.",
   bg:['#1a1424','#0a0812'],
   pathColor:'rgba(180,140,255,0.2)',
-  waypoints:[[-20,120],[220,120],[220,420],[460,420],[460,140],[700,140],[700,560],[440,560],[440,780],[860,780],[860,940],[920,940]],
+  waypoints:[[-20,98],[220,98],[220,344],[460,344],[460,115],[700,115],[700,459],[440,459],[440,640],[860,640],[860,771],[920,771]],
   lives:25,
   waveCount:Infinity,
   bossFlavor:"He never really leaves this place. Why would he? You keep coming back too."
@@ -931,6 +931,7 @@ let state = {
   resonance:0,
   resonanceTargeting:false,
   autoWaveDeadline:0,
+  waveStartedAt:0,
   selectedBuild:null,
   selectedTower:null,
   waveActive:false,
@@ -1356,6 +1357,25 @@ function tick(now){
     onWaveCleared();
   }
 
+  // safety valve: if a wave has been active for far longer than any wave should
+  // reasonably take (e.g. an enemy permanently stun-locked so it never dies or
+  // reaches the end), force any survivors through rather than soft-locking the
+  // game forever. They still cost Hall Integrity — this isn't a free pass, just
+  // a guarantee the "Begin Wave" button can never get stuck disabled for good.
+  if(state.waveActive && state.spawnQueue.length===0 && state.enemies.length>0
+     && state.waveStartedAt && (now - state.waveStartedAt) > 60000){
+    for(const e of state.enemies){
+      if(e.hp>0){
+        state.integrity -= (e.isBoss?3:1);
+        if(e.isBoss){ state.bossEscaped = true; state.bossAlive = false; }
+        e.hp = 0;
+      }
+    }
+    state.enemies = [];
+    state.waveActive = false;
+    onWaveCleared();
+  }
+
   // endless mode: auto-release the next wave once its countdown elapses
   if(!state.waveActive && state.autoWaveDeadline && now >= state.autoWaveDeadline){
     beginWave();
@@ -1460,6 +1480,7 @@ function beginWave(){
   if(state.waveActive) return;
   state.waveNum++;
   state.autoWaveDeadline = 0;
+  state.waveStartedAt = performance.now();
   const isEndless = currentMap.id==='endless';
   scheduleAutoWave(state.waveNum+1); // countdown for the NEXT wave starts now, at this wave's release
   const list = isEndless ? generateEndlessWave(state.waveNum) : generateWave(currentMap, state.waveNum);
@@ -2161,10 +2182,12 @@ function updateHud(){
   intEl.parentElement.classList.toggle('low', state.integrity <= currentMap.lives*0.3);
   document.getElementById('waveVal').textContent = currentMap.waveCount===Infinity ? `${state.waveNum}` : `${state.waveNum}/${currentMap.waveCount}`;
   const startBtn = document.getElementById('startWaveBtn');
-  if(!state.waveActive && state.autoWaveDeadline){
+  if(state.waveActive){
+    startBtn.textContent = 'Wave in progress…';
+  } else if(state.autoWaveDeadline){
     const secs = Math.max(0, Math.ceil((state.autoWaveDeadline-performance.now())/1000));
     startBtn.textContent = `Begin Wave (auto in ${secs}s)`;
-  } else if(!state.waveActive){
+  } else {
     startBtn.textContent = 'Begin Wave';
   }
   buildToolbar();
