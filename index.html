@@ -412,44 +412,98 @@ const TOWER_NOTE_HZ = {
   vael: 880.000,    // A5
   echo: 587.330     // D5
 };
+const TOWER_HARMONIC_BASE_GAIN = 0.16; // the standard tower fire-sound peak level; other levels are ratioed off this
+function makeDistortionCurve(amount){
+  const n = 4096;
+  const curve = new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const x = (i*2)/n - 1;
+    curve[i] = ((3+amount)*x*20*Math.PI/180) / (Math.PI + amount*Math.abs(x));
+  }
+  return curve;
+}
+const DISTORTION_CURVE_MED = makeDistortionCurve(12);
+const DISTORTION_CURVE_HEAVY = makeDistortionCurve(32);
+const DISTORTION_CURVE_PINCH = makeDistortionCurve(55);
+
 function playHarmonicTone(freq, opts){
   opts = opts||{};
   if(!audioCtx) return;
   const now = audioCtx.currentTime;
   const dur = opts.dur || 0.34;
-  const amt = opts.gain || 0.16;
+  const amt = opts.gain || TOWER_HARMONIC_BASE_GAIN;
+  const tier = opts.tier || 1;
   const osc1 = audioCtx.createOscillator(); osc1.type='sine'; osc1.frequency.value=freq;
   const osc2 = audioCtx.createOscillator(); osc2.type='sine'; osc2.frequency.value=freq*2.006; // slightly detuned overtone for shimmer
   const g = audioCtx.createGain();
+  const boostedAmt = amt * (1 + (tier-1)*0.35); // gets louder each tier too
   g.gain.setValueAtTime(0.0001, now);
-  g.gain.exponentialRampToValueAtTime(amt, now+0.006);
+  g.gain.exponentialRampToValueAtTime(boostedAmt, now+0.006);
   g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
   const g2 = audioCtx.createGain(); g2.gain.value = 0.35;
-  osc1.connect(g); osc2.connect(g2); g2.connect(g); g.connect(masterGain);
+  osc1.connect(g); osc2.connect(g2); g2.connect(g);
+  let outNode = g;
+  if(tier>=2){
+    const shaper = audioCtx.createWaveShaper();
+    shaper.curve = tier>=3 ? DISTORTION_CURVE_HEAVY : DISTORTION_CURVE_MED;
+    shaper.oversample = '2x';
+    g.connect(shaper);
+    outNode = shaper;
+  }
+  outNode.connect(masterGain);
   osc1.start(now); osc1.stop(now+dur+0.05);
   osc2.start(now); osc2.stop(now+dur+0.05);
 }
-function playTowerFireSound(key){
+function playPinchHarmonic(freq){
   if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(freq*0.94, now);
+  osc.frequency.exponentialRampToValueAtTime(freq, now+0.025); // quick upward squeal into the note, like a real pinch harmonic
+  const funda = audioCtx.createOscillator();
+  funda.type = 'sawtooth';
+  funda.frequency.value = freq/2; // the full note an octave below, stacked under the harmonic
+  const mixGain = audioCtx.createGain();
+  mixGain.gain.setValueAtTime(0.0001, now);
+  mixGain.gain.exponentialRampToValueAtTime(1.0, now+0.008); // driven at 100% into the shaper
+  mixGain.gain.exponentialRampToValueAtTime(0.0001, now+0.4);
+  const shaper = audioCtx.createWaveShaper();
+  shaper.curve = DISTORTION_CURVE_PINCH;
+  shaper.oversample = '4x';
+  const outGain = audioCtx.createGain();
+  outGain.gain.value = 0.22; // tame the post-distortion level so it doesn't clip the master bus
+  osc.connect(mixGain); funda.connect(mixGain);
+  mixGain.connect(shaper); shaper.connect(outGain); outGain.connect(masterGain);
+  osc.start(now); osc.stop(now+0.42);
+  funda.start(now); funda.stop(now+0.42);
+}
+function playTowerFireSound(key, tier){
+  if(!audioCtx) return;
+  tier = tier||1;
   if(key==='rds'){
     const scale = [523.251,587.330,659.255,783.991,880.000];
     const f = scale[Math.floor(Math.random()*scale.length)] * (0.985+Math.random()*0.03);
-    playHarmonicTone(f, {dur:0.28, gain:0.19});
+    playHarmonicTone(f, {dur:0.28, gain:0.19, tier});
     return;
   }
   if(key==='echo'){
-    playHarmonicTone(TOWER_NOTE_HZ.echo, {dur:0.3, gain:0.17});
-    setTimeout(()=>{ if(audioCtx) playHarmonicTone(TOWER_NOTE_HZ.echo, {dur:0.22, gain:0.08}); }, 95);
+    playHarmonicTone(TOWER_NOTE_HZ.echo, {dur:0.3, gain:0.17, tier});
+    setTimeout(()=>{ if(audioCtx) playHarmonicTone(TOWER_NOTE_HZ.echo, {dur:0.22, gain:0.08, tier}); }, 95);
     return;
   }
   const freq = TOWER_NOTE_HZ[key];
-  if(freq) playHarmonicTone(freq, {dur:0.32, gain:0.16});
+  if(freq) playHarmonicTone(freq, {dur:0.32, gain:0.16, tier});
 }
 
 /* ---------- Funky Claude's riff: contrary-motion pedal-tone bass line ---------- */
 // C4, E3, B3, F3, A#3, F#3, A3, A3, G3, E3 — all quarter notes, looping
 const CLAUDE_RIFF_NOTES = [261.626,164.814,246.942,174.614,233.082,185.000,220.000,220.000,195.998,164.814];
-const CLAUDE_RIFF_BPM = 104;
+const CLAUDE_RIFF_BPM = 120;
+// Tiny push/pull per step (seconds) — a bit of human "in the pocket" feel so the
+// groove doesn't sit dead-on-grid. Keeps room to push the tempo further later
+// without it feeling robotic.
+const CLAUDE_GROOVE_OFFSETS = [0, -0.014, 0.010, -0.008, 0, -0.014, 0.010, -0.008, 0, 0.007];
 let claudeRiff = { stepIndex:0, nextNoteTime:0, timerId:null, playing:false };
 function playFunkNote(time, freq){
   const osc = audioCtx.createOscillator(); osc.type='sawtooth'; osc.frequency.setValueAtTime(freq, time);
@@ -467,7 +521,8 @@ function claudeRiffScheduler(){
   if(!audioCtx) return;
   const beatDur = 60/CLAUDE_RIFF_BPM;
   while(claudeRiff.nextNoteTime < audioCtx.currentTime + 0.15){
-    playFunkNote(claudeRiff.nextNoteTime, CLAUDE_RIFF_NOTES[claudeRiff.stepIndex]);
+    const groove = CLAUDE_GROOVE_OFFSETS[claudeRiff.stepIndex % CLAUDE_GROOVE_OFFSETS.length];
+    playFunkNote(claudeRiff.nextNoteTime + groove, CLAUDE_RIFF_NOTES[claudeRiff.stepIndex]);
     claudeRiff.nextNoteTime += beatDur;
     claudeRiff.stepIndex = (claudeRiff.stepIndex+1) % CLAUDE_RIFF_NOTES.length;
   }
@@ -483,6 +538,61 @@ function stopClaudeRiff(){
   claudeRiff.playing = false;
   if(claudeRiff.timerId) clearInterval(claudeRiff.timerId);
   claudeRiff.timerId = null;
+}
+
+/* ---------- adversary drones: one sustained Em(add maj7) tone per enemy TYPE ---------- */
+// E2, B2, E3, G3, D#4, E4 — the chord rung out across all six open/fretted strings.
+// One tone per type, sustained only while at least one of that type is alive.
+const ENEMY_DRONE_HZ = {
+  drone: 82.407,         // low E — a literal drone, for the enemy named Drone
+  discordKnight: 123.471,// B2 — heaviest tone left, for the toughest regular enemy
+  chorusWisp: 164.814,   // E3 — an octave on the root, since it duplicates itself
+  ember: 195.998,        // G3
+  screecher: 311.127,    // D#4 — the maj7 tension tone, fitting something that screeches
+  whisper: 329.628       // E4 — the top voice, airy and delicate
+};
+let enemyDrones = {};
+function ensureDroneNode(type){
+  if(enemyDrones[type] || !audioCtx) return;
+  const freq = ENEMY_DRONE_HZ[type];
+  const osc1 = audioCtx.createOscillator(); osc1.type='sine'; osc1.frequency.value=freq;
+  const osc2 = audioCtx.createOscillator(); osc2.type='sine'; osc2.frequency.value=freq*1.003; // gentle detune for a soft chorus shimmer
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.0001;
+  osc1.connect(gain); osc2.connect(gain); gain.connect(masterGain);
+  osc1.start(); osc2.start();
+  enemyDrones[type] = { osc1, osc2, gain, active:false };
+}
+function setDroneActive(type, active){
+  ensureDroneNode(type);
+  const d = enemyDrones[type];
+  if(!d || !audioCtx) return;
+  if(active === d.active) return;
+  d.active = active;
+  const now = audioCtx.currentTime;
+  d.gain.gain.cancelScheduledValues(now);
+  d.gain.gain.setValueAtTime(Math.max(d.gain.gain.value, 0.0001), now);
+  if(active) d.gain.gain.exponentialRampToValueAtTime(TOWER_HARMONIC_BASE_GAIN*0.5, now+0.5);
+  else d.gain.gain.exponentialRampToValueAtTime(0.0001, now+0.7);
+}
+function updateEnemyDrones(){
+  if(!audioCtx) return;
+  const present = {};
+  for(const e of state.enemies){
+    if(e.hp<=0) continue;
+    const key = e.type==='chorusWisp_child' ? 'chorusWisp' : e.type;
+    if(ENEMY_DRONE_HZ[key]!==undefined) present[key]=true;
+  }
+  for(const type in ENEMY_DRONE_HZ){
+    setDroneActive(type, !!present[type]);
+  }
+}
+function stopAllEnemyDrones(){
+  for(const type in enemyDrones){
+    const d = enemyDrones[type];
+    try{ d.osc1.stop(); d.osc2.stop(); }catch(e){}
+  }
+  enemyDrones = {};
 }
 
 /* ---------- freemium quota: 3 free runs/day, matching the Ancient Games pattern ---------- */
@@ -1088,7 +1198,10 @@ function tick(now){
     t.cooldown = stats.rate;
     t.flashUntil = now+120;
     t.targetRef = target;
-    playTowerFireSound(t.key);
+    playTowerFireSound(t.key, t.tier);
+    if(t.resonanceBoost && t.resonanceBoost.until > now){
+      playPinchHarmonic(TOWER_NOTE_HZ[t.key] || 440);
+    }
     for(let b=0;b<barrels;b++){
       if(t.key==='rds'){
         const rdsPowerMul = (t.resonanceBoost && t.resonanceBoost.until > now) ? 2 : 1;
@@ -1171,6 +1284,9 @@ function tick(now){
   // Funky Claude's riff plays exactly while he's alive on the map
   if(state.bossAlive && !claudeRiff.playing) startClaudeRiff();
   else if(!state.bossAlive && claudeRiff.playing) stopClaudeRiff();
+
+  // one sustained chord tone per adversary type, live only while that type is on the map
+  updateEnemyDrones();
 
   // live HUD refresh so echoes earned mid-wave immediately unlock purchases/upgrades
   state.hudRefresh = (state.hudRefresh||0) - dt;
@@ -1269,6 +1385,7 @@ function beginWave(){
 }
 function endRun(won){
   stopClaudeRiff();
+  stopAllEnemyDrones();
   state.screen = won ? 'mapComplete' : 'defeat';
   if(won && save.unlocked <= currentMap.id && currentMap.id < MAPS.length){
     save.unlocked = currentMap.id+1;
@@ -2279,6 +2396,7 @@ function startMap(id){
   state.watermark = generateWatermark(currentMap);
   state.bossTrail = [];
   stopClaudeRiff();
+  stopAllEnemyDrones();
   state.resonance = 0;
   state.resonanceTargeting = false;
   state.selectedBuild=null;
@@ -2303,6 +2421,7 @@ document.getElementById('exitToMenuBtn').onclick = ()=>{
   if(state.screen!=='playing'){ state.screen='menu'; showModal(); return; }
   if(confirm('Leave this map? Your current run will be lost.')){
     stopClaudeRiff();
+    stopAllEnemyDrones();
     state.screen='menu';
     showModal();
   }
