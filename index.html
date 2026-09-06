@@ -2571,7 +2571,7 @@ function startMap(id){
   consumeFreePlay();
   currentMap = id==='endless' ? ENDLESS_MAP : MAPS.find(m=>m.id===id);
   state.screen='playing';
-  state.echoes = id==='endless' ? 160 : 140 + (id-1)*20;
+  state.echoes = id==='endless' ? 280 : 140 + (id-1)*20;
   state.integrity = currentMap.lives;
   state.waveNum = 0;
   state.towers = [];
