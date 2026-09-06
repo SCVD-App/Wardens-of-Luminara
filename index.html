@@ -1392,6 +1392,16 @@ function onWaveCleared(){
   }
   showBanner(`Wave ${state.waveNum} cleared`);
   document.getElementById('startWaveBtn').disabled=false;
+  // Guarantee at least a short breathing gap before the next auto-release, even if
+  // that wave's release-based deadline (scheduled back when THIS wave started) has
+  // already passed — otherwise a wave that takes longer than its interval to clear
+  // chains straight into the next one with zero window to build or upgrade.
+  if(currentMap.id==='endless'){
+    const minGapDeadline = performance.now() + 3000;
+    if(!state.autoWaveDeadline || state.autoWaveDeadline < minGapDeadline){
+      state.autoWaveDeadline = minGapDeadline;
+    }
+  }
   checkUnlocks();
   updateHud();
 }
