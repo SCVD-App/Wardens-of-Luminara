@@ -1471,7 +1471,7 @@ function checkUnlocks(){
 }
 function beginWave(){
   if(currentMap.id==='endless'){
-    beginWaveEndless();
+    beginWaveEndless(true);
     return;
   }
   if(state.waveActive) return;
@@ -1494,12 +1494,12 @@ function beginWave(){
 // calling it in just layers more enemies onto the existing queue. Difficulty
 // scaling travels with each spawned enemy individually (spec.scale) so waves
 // with different difficulty can coexist correctly mid-overlap.
-const ENDLESS_MAX_BACKLOG = 25; // spawn queue can never outrun what can actually appear on screen
-function beginWaveEndless(){
+const ENDLESS_MAX_BACKLOG = 30; // spawn queue can never outrun what can actually appear on screen
+function beginWaveEndless(manual){
   const backlog = state.spawnQueue.length + state.enemies.filter(e=>e.hp>0).length;
   if(backlog >= ENDLESS_MAX_BACKLOG){
-    showBanner("Too many on the field — let some through or clear a few first");
-    state.endlessCountdownDeadline = performance.now() + 2000; // retry soon rather than spam
+    if(manual) showBanner("Too many on the field — let some through or clear a few first");
+    state.endlessCountdownDeadline = performance.now() + 2000; // retry soon, silently unless manually tapped
     return;
   }
   state.waveNum++;
