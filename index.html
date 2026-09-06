@@ -413,6 +413,7 @@ const TOWER_NOTE_HZ = {
   echo: 587.330     // D5
 };
 const TOWER_HARMONIC_BASE_GAIN = 0.16; // the standard tower fire-sound peak level; other levels are ratioed off this
+const ENEMY_DRONE_GAIN = TOWER_HARMONIC_BASE_GAIN * 0.25;
 function makeDistortionCurve(amount){
   const n = 4096;
   const curve = new Float32Array(n);
@@ -499,11 +500,12 @@ function playTowerFireSound(key, tier){
 /* ---------- Funky Claude's riff: contrary-motion pedal-tone bass line ---------- */
 // C4, E3, B3, F3, A#3, F#3, A3, A3, G3, E3 — all quarter notes, looping
 const CLAUDE_RIFF_NOTES = [261.626,164.814,246.942,174.614,233.082,185.000,220.000,220.000,195.998,164.814];
-const CLAUDE_RIFF_BPM = 120;
+const CLAUDE_RIFF_BPM = 132;
 // Tiny push/pull per step (seconds) — a bit of human "in the pocket" feel so the
-// groove doesn't sit dead-on-grid. Keeps room to push the tempo further later
-// without it feeling robotic.
-const CLAUDE_GROOVE_OFFSETS = [0, -0.014, 0.010, -0.008, 0, -0.014, 0.010, -0.008, 0, 0.007];
+// groove doesn't sit dead-on-grid. Note indices 6/7 are the repeated A: the first
+// sits right on the beat as an anchor, the second is deliberately dragged behind
+// it for separation — a laid-back funk repeat rather than a mechanical echo.
+const CLAUDE_GROOVE_OFFSETS = [0, -0.014, 0.010, -0.008, 0, -0.014, 0, 0.035, 0, 0.007];
 let claudeRiff = { stepIndex:0, nextNoteTime:0, timerId:null, playing:false };
 function playFunkNote(time, freq){
   const osc = audioCtx.createOscillator(); osc.type='sawtooth'; osc.frequency.setValueAtTime(freq, time);
@@ -572,7 +574,7 @@ function setDroneActive(type, active){
   const now = audioCtx.currentTime;
   d.gain.gain.cancelScheduledValues(now);
   d.gain.gain.setValueAtTime(Math.max(d.gain.gain.value, 0.0001), now);
-  if(active) d.gain.gain.exponentialRampToValueAtTime(TOWER_HARMONIC_BASE_GAIN*0.25, now+0.5);
+  if(active) d.gain.gain.exponentialRampToValueAtTime(ENEMY_DRONE_GAIN, now+0.5);
   else d.gain.gain.exponentialRampToValueAtTime(0.0001, now+0.7);
 }
 function updateEnemyDrones(){
@@ -593,6 +595,37 @@ function stopAllEnemyDrones(){
     try{ d.osc1.stop(); d.osc2.stop(); }catch(e){}
   }
   enemyDrones = {};
+}
+
+/* ---------- breach crash: gated cymbal noise burst when an attacker gets through ---------- */
+let breachNoiseBuffer = null;
+function getBreachNoiseBuffer(){
+  if(breachNoiseBuffer || !audioCtx) return breachNoiseBuffer;
+  const len = Math.ceil(audioCtx.sampleRate * 1.6);
+  breachNoiseBuffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const data = breachNoiseBuffer.getChannelData(0);
+  for(let i=0;i<len;i++) data[i] = Math.random()*2 - 1;
+  return breachNoiseBuffer;
+}
+function playBreachCrash(){
+  if(!audioCtx) return;
+  const buf = getBreachNoiseBuffer();
+  if(!buf) return;
+  const now = audioCtx.currentTime;
+  const dur = 1.2; // gated length, per spec: ~1-1.5s then cut, not left to ring out
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const hp = audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1800; hp.Q.value=0.5;
+  const tilt = audioCtx.createBiquadFilter(); tilt.type='highshelf'; tilt.frequency.value=4000; tilt.gain.value=6; // brighten without narrowing the band
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(ENEMY_DRONE_GAIN, now+0.006); // crash attack
+  gain.gain.exponentialRampToValueAtTime(ENEMY_DRONE_GAIN*0.4, now+dur*0.7); // natural-ish taper
+  gain.gain.setValueAtTime(ENEMY_DRONE_GAIN*0.4, now+dur-0.03);
+  gain.gain.linearRampToValueAtTime(0.0001, now+dur); // hard gate cutoff, no long tail
+  src.connect(hp); hp.connect(tilt); tilt.connect(gain); gain.connect(masterGain);
+  src.start(now);
+  src.stop(now+dur+0.02);
 }
 
 /* ---------- freemium quota: 3 free runs/day, matching the Ancient Games pattern ---------- */
@@ -1155,6 +1188,7 @@ function tick(now){
       if(e.isBoss){ state.bossEscaped = true; state.bossAlive = false; }
       spawnParticle(e.x,e.y,'#ff4444',10);
       triggerBreachGlow(e.isBoss);
+      playBreachCrash();
       if(e.isBoss) triggerShake(now, 16, 550);
     }
   }
@@ -1358,7 +1392,6 @@ function onWaveCleared(){
   }
   showBanner(`Wave ${state.waveNum} cleared`);
   document.getElementById('startWaveBtn').disabled=false;
-  scheduleAutoWave(state.waveNum+1);
   checkUnlocks();
   updateHud();
 }
@@ -1370,6 +1403,7 @@ function beginWave(){
   state.waveNum++;
   state.autoWaveDeadline = 0;
   const isEndless = currentMap.id==='endless';
+  scheduleAutoWave(state.waveNum+1); // countdown for the NEXT wave starts now, at this wave's release
   const list = isEndless ? generateEndlessWave(state.waveNum) : generateWave(currentMap, state.waveNum);
   state.spawnQueue = list;
   state.spawnQueue.scaleFactor = list.scaleFactor||1;
