@@ -2026,10 +2026,11 @@ function showModal(){
         <div class="quest-head">The Warden's Gauntlet</div>
         <div class="quest-desc">No quest, no ending — a proving ground to field and upgrade everything at once.</div>
         <div class="maps">
-          <div class="map-card endless-card">
+          <div class="map-card endless-card ${save.pro ? '' : 'locked'}">
             <h4>${ENDLESS_MAP.name}</h4>
             <div class="mdesc">${ENDLESS_MAP.desc}</div>
             ${save.best['endless'] ? `<div class="best">Best: wave ${save.best['endless']}</div>` : ''}
+            ${save.pro ? '' : `<div class="best" style="color:#8a93b8;">Pro exclusive</div>`}
           </div>
         </div>
       </div>
@@ -2040,7 +2041,7 @@ function showModal(){
       el.onclick = ()=> startMap(parseInt(el.dataset.map));
     });
     const endlessCard = box.querySelector('.endless-card');
-    if(endlessCard) endlessCard.onclick = ()=> startMap('endless');
+    if(endlessCard) endlessCard.onclick = ()=> save.pro ? startMap('endless') : showPaywall();
     document.getElementById('menuArmoryBtn').onclick = ()=> showArmory(()=> showModal());
     const proBtn = document.getElementById('menuProBtn');
     if(proBtn) proBtn.onclick = ()=> showPaywall();
@@ -2084,6 +2085,10 @@ function hideModal(){ document.getElementById('overlay').classList.add('hidden')
 
 /* ---------- start / reset ---------- */
 function startMap(id){
+  if(id==='endless' && !save.pro){
+    showPaywall();
+    return;
+  }
   if(playsRemainingToday() <= 0){
     showPaywall();
     return;
