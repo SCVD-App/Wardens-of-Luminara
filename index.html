@@ -398,6 +398,23 @@ function resumeAudioIfNeeded(){
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
 }
 document.addEventListener('pointerdown', ()=>{ ensureAudio(); resumeAudioIfNeeded(); }, {passive:true});
+
+/* ---------- keep the screen awake during play (same pattern as Cult Connections / Mic Drop) ---------- */
+let wakeLock = null;
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', ()=>{ wakeLock = null; });
+    }
+  }catch(e){ /* not supported, or denied — fine, just no-op */ }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && !wakeLock){
+    requestWakeLock();
+  }
+});
+requestWakeLock();
 function setMuted(m){
   save.muted = m;
   writeSave(save);
@@ -437,7 +454,7 @@ function playHarmonicTone(freq, opts){
   const osc1 = audioCtx.createOscillator(); osc1.type='sine'; osc1.frequency.value=freq;
   const osc2 = audioCtx.createOscillator(); osc2.type='sine'; osc2.frequency.value=freq*2.006; // slightly detuned overtone for shimmer
   const g = audioCtx.createGain();
-  const boostedAmt = amt * (1 + (tier-1)*0.35); // gets louder each tier too
+  const boostedAmt = amt * (1 + (tier-1)*0.25); // gets louder each tier too
   g.gain.setValueAtTime(0.0001, now);
   g.gain.exponentialRampToValueAtTime(boostedAmt, now+0.006);
   g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
@@ -607,25 +624,48 @@ function getBreachNoiseBuffer(){
   for(let i=0;i<len;i++) data[i] = Math.random()*2 - 1;
   return breachNoiseBuffer;
 }
+// classic inharmonic-partial recipe used in drum machines for metallic cymbal timbre
+const RIDE_PARTIAL_RATIOS = [1, 1.342, 1.2312, 1.6532, 1.9412, 2.6812];
 function playBreachCrash(){
   if(!audioCtx) return;
-  const buf = getBreachNoiseBuffer();
-  if(!buf) return;
   const now = audioCtx.currentTime;
   const dur = 1.2; // gated length, per spec: ~1-1.5s then cut, not left to ring out
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  const hp = audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1800; hp.Q.value=0.5;
-  const tilt = audioCtx.createBiquadFilter(); tilt.type='highshelf'; tilt.frequency.value=4000; tilt.gain.value=6; // brighten without narrowing the band
+  const baseFreq = 520; // ride-style metallic base, more "ping" than a dark crash
+
+  // the metallic body: a bank of detuned square oscillators at inharmonic ratios —
+  // this is what actually reads as "cymbal" rather than plain filtered noise
+  const metalBus = audioCtx.createGain(); metalBus.gain.value = 0.6;
+  RIDE_PARTIAL_RATIOS.forEach(ratio=>{
+    const osc = audioCtx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = baseFreq*ratio;
+    osc.connect(metalBus);
+    osc.start(now);
+    osc.stop(now+dur+0.05);
+  });
+  const hp = audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1200;
+  const bp = audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=3200; bp.Q.value=0.9;
+  metalBus.connect(hp); hp.connect(bp);
+
+  // a little noise underneath for sizzle/shimmer — subtle, so it reads as cymbal
+  // texture rather than the hiss it was when it carried the whole sound
+  const buf = getBreachNoiseBuffer();
+  if(buf){
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const noiseHp = audioCtx.createBiquadFilter(); noiseHp.type='highpass'; noiseHp.frequency.value=3500;
+    const noiseGain = audioCtx.createGain(); noiseGain.gain.value = 0.22;
+    src.connect(noiseHp); noiseHp.connect(noiseGain); noiseGain.connect(bp);
+    src.start(now); src.stop(now+dur+0.05);
+  }
+
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(ENEMY_DRONE_GAIN, now+0.006); // crash attack
-  gain.gain.exponentialRampToValueAtTime(ENEMY_DRONE_GAIN*0.4, now+dur*0.7); // natural-ish taper
-  gain.gain.setValueAtTime(ENEMY_DRONE_GAIN*0.4, now+dur-0.03);
+  gain.gain.exponentialRampToValueAtTime(ENEMY_DRONE_GAIN, now+0.004); // sharp ride "ping" attack
+  gain.gain.exponentialRampToValueAtTime(ENEMY_DRONE_GAIN*0.35, now+dur*0.6);
+  gain.gain.setValueAtTime(ENEMY_DRONE_GAIN*0.35, now+dur-0.03);
   gain.gain.linearRampToValueAtTime(0.0001, now+dur); // hard gate cutoff, no long tail
-  src.connect(hp); hp.connect(tilt); tilt.connect(gain); gain.connect(masterGain);
-  src.start(now);
-  src.stop(now+dur+0.02);
+  bp.connect(gain); gain.connect(masterGain);
 }
 
 /* ---------- freemium quota: 3 free runs/day, matching the Ancient Games pattern ---------- */
@@ -2419,6 +2459,7 @@ function hideModal(){ document.getElementById('overlay').classList.add('hidden')
 
 /* ---------- start / reset ---------- */
 function startMap(id){
+  requestWakeLock();
   if(id==='endless' && !save.pro){
     showPaywall();
     return;
