@@ -1203,7 +1203,7 @@ function tick(now){
     while(state.spawnQueue.length && state.spawnTimer<=0){
       const spec = state.spawnQueue.shift();
       spawnEnemy(spec, currentMap, spec.scale||1);
-      state.spawnTimer = (spec.delay!==undefined? Math.max(100,spec.delay*0.6) : 300);
+      state.spawnTimer = (spec.delay!==undefined? Math.max(140,spec.delay*0.75) : 400);
     }
   }
 
